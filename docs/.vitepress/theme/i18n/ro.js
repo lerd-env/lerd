@@ -93,6 +93,16 @@ export default {
       'Lerd rulează în WSL2 cu același CLI, panou, servicii și server MCP. Instalatorul de Windows configurează totul, iar ghidul WSL2 explică fiecare pas.',
     ],
   },
+  desktop: {
+    label: "Aplicația desktop", h: ["Lerd,", "ca aplicație desktop."],
+    lead: "O aplicație însoțitoare opțională care deschide panoul într-o fereastră proprie și afișează nativ notificările Lerd. Lerd funcționează la fel și fără ea.",
+    arm: "Apple silicon", intel: "Intel", windows: "Instalator Windows",
+    items: [
+      "Semnată și notarizată de Apple, deci se deschide fără avertismente și se actualizează singură. Instalatorul o oferă și el.",
+      "Un Flatpak din depozitul propriu al Lerd, ținut la zi de flatpak update sau de centrul de software.",
+      "Vine deja cu instalatorul pentru Windows, nu mai e nimic de descărcat.",
+    ],
+  },
   principles: {
     label: 'Principii', h: ['Cum e construit', 'Lerd.'],
     items: [

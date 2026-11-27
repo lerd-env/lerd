@@ -93,6 +93,16 @@ export default {
       'Lerd działa w WSL2 z tym samym CLI, panelem, usługami i serwerem MCP. Instalator Windows wszystko konfiguruje, a przewodnik WSL2 opisuje każdy krok.',
     ],
   },
+  desktop: {
+    label: "Aplikacja desktopowa", h: ["Lerd", "jako aplikacja desktopowa."],
+    lead: "Opcjonalna aplikacja towarzysząca, która otwiera panel we własnym oknie i pokazuje powiadomienia Lerd natywnie. Lerd działa tak samo bez niej.",
+    arm: "Apple silicon", intel: "Intel", windows: "Instalator Windows",
+    items: [
+      "Podpisana i notaryzowana przez Apple, więc otwiera się bez ostrzeżeń i sama się aktualizuje. Instalator też ją proponuje.",
+      "Flatpak z własnego repozytorium Lerd, aktualizowany przez flatpak update lub centrum oprogramowania.",
+      "Jest już częścią instalatora dla Windows, nie trzeba niczego dodatkowo pobierać.",
+    ],
+  },
   principles: {
     label: 'Zasady', h: ['Jak zbudowany', 'jest Lerd.'],
     items: [
