@@ -7,6 +7,14 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.39.3] - 2026-11-27
+
+A patch for lerd-ui sitting near half a core whenever a dashboard was open on a machine where lerd installed mise. Closing every dashboard page was the only way to bring it back to idle until now.
+
+### Fixed
+
+- **lerd-ui rebuilt its status about once a second while a dashboard was open** (#2766). Reading mise's installed version rewrote its stamp, and every stamp write announced a tool install, which asks lerd-ui to rebuild its status, and that rebuild read mise's version again. With a browser tab, the installed app or the desktop app open, that held lerd-ui near half a core rebuilding every site and service. A version read off a binary that was already there is now recorded without announcing an install, while every real install, a reinstall of the same version included, still clears the dashboard's update answers.
+
 ## [1.39.2] - 2026-11-19
 
 A patch for the macOS loopback redirect 1.39.1 introduced. On a Mac where another tool had loaded a pf ruleset that skips `lo0`, the redirect loaded but never applied, so every site and the dashboard went down while install, start and doctor all said things were fine. Lerd now checks that the redirect really carries traffic and backs out to the previous bind when it does not. Thanks to @aaajeetee, who reported it and fixed it.

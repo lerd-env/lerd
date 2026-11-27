@@ -242,3 +242,56 @@ rm -f "$HOME/lerd-vm-fakebin/opened"
 PATH=$fake:$PATH tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open service dashboard mailpit" "sleep:1" "keys:\\r" "sleep:3" >/dev/null
 check_out "10.48 opening it hands the dashboard URL to the browser" 'http://localhost:8025' cat "$fake/opened"
 rm -rf "$HOME/lerd-vm-fakebin"
+
+# dashboard_frames <seconds>: what lerd-ui pushes to one open dashboard socket in
+# that time. Idle that is the snapshot on connect and little else; a status that
+# rebuilt itself once a second while a page was open sent one a second (#2766).
+dashboard_frames() {
+	python3 - "$1" <<'PY'
+import socket, sys, time
+s = socket.create_connection(("127.0.0.1", 7073), timeout=20)
+s.sendall(b"GET /api/ws HTTP/1.1\r\nHost: 127.0.0.1:7073\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+          b"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n")
+buf = b""
+while b"\r\n\r\n" not in buf:
+    chunk = s.recv(4096)
+    if not chunk:
+        sys.exit("lerd-ui closed the socket during the upgrade")
+    buf += chunk
+head, buf = buf.split(b"\r\n\r\n", 1)
+if not head.startswith(b"HTTP/1.1 101"):
+    sys.exit("upgrade refused: " + head.split(b"\r\n")[0].decode())
+end, frames = time.time() + float(sys.argv[1]), 0
+def need(n):
+    global buf
+    while len(buf) < n:
+        s.settimeout(max(0.01, end - time.time()))
+        chunk = s.recv(65536)
+        if not chunk:
+            raise EOFError
+        buf += chunk
+try:
+    while time.time() < end:
+        need(2)
+        n, off = buf[1] & 0x7F, 2
+        if n == 126:
+            need(4); n, off = int.from_bytes(buf[2:4], "big"), 4
+        elif n == 127:
+            need(10); n, off = int.from_bytes(buf[2:10], "big"), 10
+        need(off + n)
+        buf, frames = buf[off + n:], frames + 1
+except socket.timeout:
+    pass
+except EOFError:
+    sys.exit(f"lerd-ui closed the socket after {frames} frames")
+print(frames)
+PY
+}
+# The snapshot sent on connect proves the socket works; past five, it is looping.
+idle_dashboard_quiet() {
+	local n
+	n=$(dashboard_frames 20) || return 1
+	echo "$n frames in 20s"
+	[ "$n" -ge 1 ] && [ "$n" -le 5 ]
+}
+check "10.94 an idle open dashboard is not rebuilt every second" idle_dashboard_quiet
