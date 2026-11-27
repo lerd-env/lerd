@@ -3,6 +3,7 @@ package podman
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os/exec"
@@ -56,23 +57,45 @@ func defaultEventsFn(ctx context.Context) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	r := &cmdReader{ReadCloser: out, cmd: cmd}
+	cmd.Stderr = &r.stderr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return &cmdReader{ReadCloser: out, cmd: cmd}, nil
+	return r, nil
 }
 
-// cmdReader reaps the podman process when the stream is closed.
+// cmdReader reaps the podman process when the stream is closed, and returns
+// why it exited, so a backend that cannot follow events is not a silent retry.
 type cmdReader struct {
 	io.ReadCloser
-	cmd *exec.Cmd
+	cmd    *exec.Cmd
+	stderr tailBuffer
 }
 
 func (r *cmdReader) Close() error {
-	err := r.ReadCloser.Close()
-	_ = r.cmd.Wait()
+	_ = r.ReadCloser.Close()
+	err := r.cmd.Wait()
+	if err != nil {
+		if msg := strings.TrimSpace(r.stderr.String()); msg != "" {
+			return fmt.Errorf("%w: %s", err, msg)
+		}
+	}
 	return err
 }
+
+// tailBuffer keeps the last bytes written to it, enough for an error message.
+type tailBuffer struct{ b []byte }
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.b = append(t.b, p...)
+	if over := len(t.b) - 2048; over > 0 {
+		t.b = t.b[over:]
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string { return string(t.b) }
 
 // WatchEvents follows the container event stream until ctx ends, refreshing
 // the cache on every state change. Where the stream cannot run (journald on
@@ -85,12 +108,15 @@ func (c *ContainerCache) watchEvents(ctx context.Context) {
 		fn = defaultEventsFn
 	}
 	backoff := 5 * time.Second
+	logs := streamLogger{logf: log.Printf}
 	for ctx.Err() == nil {
 		opened := time.Now()
-		if stream, err := fn(ctx); err == nil {
-			c.followEvents(stream)
-		} else if ctx.Err() == nil {
-			log.Printf("[podman] events stream: %v", err)
+		stream, err := fn(ctx)
+		if err == nil {
+			err = c.followEvents(stream)
+		}
+		if ctx.Err() == nil {
+			logs.ended(err)
 		}
 		if time.Since(opened) > time.Minute {
 			backoff = 5 * time.Second // it ran fine for a while; retry soon
@@ -106,10 +132,15 @@ func (c *ContainerCache) watchEvents(ctx context.Context) {
 	}
 }
 
-func (c *ContainerCache) followEvents(stream io.ReadCloser) {
-	defer stream.Close()
+func (c *ContainerCache) followEvents(stream io.ReadCloser) (err error) {
 	c.eventsLive.Store(true)
-	defer c.eventsLive.Store(false)
+	defer func() {
+		err = stream.Close()
+		c.eventsLive.Store(false)
+		// The loop may be waiting out the slow resync; wake it to poll at its
+		// normal pace again.
+		c.Refresh()
+	}()
 	// Events may have been missed while no stream was open.
 	c.Refresh()
 	var settle *time.Timer
@@ -130,6 +161,7 @@ func (c *ContainerCache) followEvents(stream io.ReadCloser) {
 			settle.Reset(eventsSettle)
 		}
 	}
+	return nil
 }
 
 // announceChange runs the change callback without a change in the running map,
@@ -140,5 +172,22 @@ func (c *ContainerCache) announceChange() {
 	c.onChangeMu.Unlock()
 	if cb != nil {
 		cb()
+	}
+}
+
+// streamLogger reports why the events stream ended, once per distinct reason,
+// so a podman that cannot follow events says so without filling the log.
+type streamLogger struct {
+	logf func(format string, args ...any)
+	last string
+}
+
+func (l *streamLogger) ended(err error) {
+	if err == nil {
+		return
+	}
+	if msg := err.Error(); msg != l.last {
+		l.last = msg
+		l.logf("[podman] events stream ended: %s", msg)
 	}
 }

@@ -2,6 +2,8 @@ package podman
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -87,6 +89,13 @@ func TestWatchEvents_refreshesOnEventAndTracksLiveness(t *testing.T) {
 		t.Error("stream open but not counted live")
 	}
 	pw.Close()
+	// Closing wakes the poll loop, which may be sitting on the five minute
+	// resync, so it falls back to its normal pace at once.
+	select {
+	case <-c.refresh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("closing the stream did not wake the poll loop")
+	}
 	deadline := time.Now().Add(2 * time.Second)
 	for c.eventsLive.Load() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
@@ -127,5 +136,20 @@ func TestWatchEvents_announcesAgainOnceTheBurstSettles(t *testing.T) {
 	case <-changes:
 		t.Error("one burst announced more than once")
 	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+// podman events can start, print why it cannot follow, and exit; that reason
+// must reach the log once rather than vanish on every retry.
+func TestStreamLogger_reportsEachDistinctFailureOnce(t *testing.T) {
+	var got []string
+	l := streamLogger{logf: func(format string, args ...any) { got = append(got, fmt.Sprintf(format, args...)) }}
+	boom := errors.New("exit status 125: unsupported events backend")
+	l.ended(boom)
+	l.ended(boom)
+	l.ended(nil)
+	l.ended(errors.New("exit status 1"))
+	if len(got) != 2 {
+		t.Fatalf("logged %d times, want 2 (one per distinct failure): %q", len(got), got)
 	}
 }
