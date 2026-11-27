@@ -715,7 +715,7 @@ func TestStartHostProxy_rewritesHostHeader(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -738,7 +738,7 @@ func TestStartHostProxy_setsForwardedHeaders(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -767,7 +767,7 @@ func TestStartHostProxy_keepsTunnelForwardedHost(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -801,7 +801,7 @@ func TestStartHostProxy_ignoresSpoofedForwardedHost(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -828,7 +828,7 @@ func TestStartHostProxy_rewritesLocationHeader(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -861,7 +861,7 @@ func TestStartHostProxy_rewritesLocationHeader_httpToHttps(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -892,7 +892,7 @@ func TestStartHostProxy_rewritesEveryLinkHeader(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -923,7 +923,7 @@ func TestStartHostProxy_rewritesHTMLBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -949,7 +949,7 @@ func TestStartHostProxy_doesNotRewriteBinaryBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -970,7 +970,7 @@ func TestStartHostProxy_listensOnLoopback(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -992,7 +992,7 @@ func TestStartHostProxy_requestsIdentityEncoding(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -1023,7 +1023,7 @@ func TestStartHostProxy_rewritesGzippedHTMLBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -1054,7 +1054,7 @@ func TestStartHostProxy_rewritesEscapedURLsInJSONBody(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -1081,7 +1081,7 @@ func TestStartHostProxy_upgradesRewrittenBodyURLsToHTTPS(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -1107,7 +1107,7 @@ func TestStartHostProxy_rewritesRedirectHeadersBesidesLocation(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}
@@ -1129,7 +1129,7 @@ func TestStartHostProxy_stopClosesListener(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false, nil)
 	if err != nil {
 		t.Fatalf("startHostProxy: %v", err)
 	}

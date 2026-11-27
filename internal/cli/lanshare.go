@@ -1026,44 +1026,43 @@ var loopbackViteURLEscRe = regexp.MustCompile(`https?:\\/\\/(?:localhost|127\.0\
 // http://<lanHost><vitePrefix><port>/... so the LAN device fetches them
 // through the share proxy (which forwards them back to the dev server).
 // URLs targeting the share port itself are left alone so we don't loop.
-// Handles both the plain `http://` form and the JSON-escaped `http:\/\/`
-// form that appears in Inertia.js data-page payloads.
 func rewriteLoopbackViteURLs(body []byte, lanHost string) []byte {
 	_, lanPort, err := net.SplitHostPort(lanHost)
 	if err != nil {
 		return body
 	}
-	body = loopbackViteURLRe.ReplaceAllFunc(body, func(match []byte) []byte {
-		sub := loopbackViteURLRe.FindSubmatch(match)
-		port, term := string(sub[1]), sub[2]
-		if port == lanPort {
-			return match
-		}
-		out := make([]byte, 0, len(lanHost)+len(vitePrefix)+len(port)+1+len(term)+len("http://"))
-		out = append(out, "http://"...)
-		out = append(out, lanHost...)
-		out = append(out, vitePrefix...)
-		out = append(out, port...)
-		out = append(out, term...)
-		return out
-	})
-	body = loopbackViteURLEscRe.ReplaceAllFunc(body, func(match []byte) []byte {
-		sub := loopbackViteURLEscRe.FindSubmatch(match)
-		port, term := string(sub[1]), sub[2]
-		if port == lanPort {
-			return match
-		}
-		// Build http:\/\/<lanHost>\/__lerd_vite__\/<port> keeping JSON
-		// slash escaping consistent with the surrounding payload.
-		out := []byte(`http:\/\/`)
-		out = append(out, lanHost...)
-		out = append(out, `\/__lerd_vite__\/`...)
-		out = append(out, port...)
-		// Re-emit the terminator. \/ stays as-is; quotes/angles/& stay too.
-		out = append(out, term...)
-		return out
-	})
+	return rewriteLoopbackURLs(body, "http://"+lanHost, func(port string) bool { return port != lanPort })
+}
+
+// rewriteLoopbackURLs points the loopback URLs whose port the share forwards
+// at origin's vitePrefix, in the plain form and in the JSON-escaped `http:\/\/`
+// one that Inertia.js data-page payloads carry.
+func rewriteLoopbackURLs(body []byte, origin string, forwards func(port string) bool) []byte {
+	for _, f := range []struct {
+		re     *regexp.Regexp
+		escape func(string) string
+	}{
+		{loopbackViteURLRe, func(s string) string { return s }},
+		{loopbackViteURLEscRe, escapeSlashes},
+	} {
+		body = f.re.ReplaceAllFunc(body, func(match []byte) []byte {
+			sub := f.re.FindSubmatch(match)
+			port, term := string(sub[1]), sub[2]
+			if !forwards(port) {
+				return match
+			}
+			return append([]byte(f.escape(origin+vitePrefix)+port), term...)
+		})
+	}
 	return body
+}
+
+// serviceDomainURLRe matches a URL on a service's own domain in both forms,
+// with the terminators of the loopback patterns, so rewriting it to the
+// loopback port the service is published on hands it to rewriteLoopbackURLs.
+func serviceDomainURLRe(domain string) *regexp.Regexp {
+	d := regexp.QuoteMeta(domain)
+	return regexp.MustCompile(`https?:(?:(//)` + d + `([/"'<>?#;)\s])|(\\/\\/)` + d + `(\\/|["'<>&]))`)
 }
 
 func LANShareURL(lanPort int) string {

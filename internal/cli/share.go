@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -257,6 +258,9 @@ type shareTarget struct {
 	name    string
 	domain  string
 	secured bool
+	// storage is the site's bucket on lerd's RustFS, served through the tunnel
+	// with the site; nil when it keeps no files there.
+	storage *shareStorage
 }
 
 // shareTargetFor resolves a site, and optionally one of its worktree branches,
@@ -266,11 +270,21 @@ func shareTargetFor(site *config.Site, branch string) (shareTarget, error) {
 	if err != nil {
 		return shareTarget{}, err
 	}
-	name := site.Name
+	name, path := site.Name, site.Path
 	if branch != "" {
 		name = site.Name + "-" + gitpkg.SanitizeBranch(branch)
+		// a worktree keeps its own env file, and with it a bucket of its own
+		wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+		if err != nil {
+			return shareTarget{}, fmt.Errorf("detecting worktrees: %w", err)
+		}
+		i := slices.IndexFunc(wts, func(wt gitpkg.Worktree) bool { return wt.Branch == branch })
+		if i < 0 {
+			return shareTarget{}, fmt.Errorf("no worktree for branch %q on %s", branch, site.Name)
+		}
+		path = wts[i].Path
 	}
-	return shareTarget{name: name, domain: domain, secured: site.Secured}, nil
+	return shareTarget{name: name, domain: domain, secured: site.Secured, storage: siteShareStorage(path)}, nil
 }
 
 // normalizeBaseDomain cleans up what a user typed for a Cloudflare base domain
@@ -349,7 +363,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 	var cmd *exec.Cmd
 	switch tool.mode {
 	case shareModeNgrok:
-		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured, target.storage)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
@@ -362,7 +376,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		}
 		cmd = tool.ngrok.cmd(proxyPort, tool.ngrokToken, headless, name)
 	case shareModeExpose:
-		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured, target.storage)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
@@ -375,7 +389,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		}
 		cmd = exec.Command(hostbin.Path("expose"), args...)
 	case shareModeCloudflare:
-		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured, target.storage)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
@@ -389,7 +403,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		}
 	case shareModeSSH:
 		// Start a local reverse proxy that rewrites Host so nginx routes correctly.
-		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured, target.storage)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
@@ -676,7 +690,7 @@ func credentialsMissing(name string) bool {
 // It also rewrites Location response headers, replacing the local domain with the
 // tunnel host so browser redirects don't escape to the local .test URL.
 // Returns the chosen port and a stop function.
-func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, func(), error) {
+func startHostProxy(domain string, httpPort, httpsPort int, secured bool, storage *shareStorage) (int, func(), error) {
 	var target *url.URL
 	if secured {
 		target = &url.URL{Scheme: "https", Host: fmt.Sprintf("localhost:%d", httpsPort)}
@@ -720,13 +734,13 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 		// one to its own client through a header of its own instead.
 		for _, h := range []string{"Location", "Content-Location", "X-Inertia-Location"} {
 			if v := resp.Header.Get(h); v != "" {
-				resp.Header.Set(h, rewriteTunnelURL(v, domain, tunnelHost))
+				resp.Header.Set(h, string(storage.rewrite([]byte(rewriteTunnelURL(v, domain, tunnelHost)), tunnelHost)))
 			}
 		}
 		// Frameworks send asset preloads as Link headers, several URLs per
 		// value, and a dev server URL carries the .test origin.
 		for i, v := range resp.Header.Values("Link") {
-			resp.Header["Link"][i] = string(rewriteTunnelBody([]byte(v), domain, tunnelHost))
+			resp.Header["Link"][i] = string(storage.rewrite(rewriteTunnelBody([]byte(v), domain, tunnelHost), tunnelHost))
 		}
 
 		ct := resp.Header.Get("Content-Type")
@@ -764,7 +778,7 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 			return nil // unknown encoding, leave untouched
 		}
 
-		body = rewriteTunnelBody(body, domain, tunnelHost)
+		body = storage.rewrite(rewriteTunnelBody(body, domain, tunnelHost), tunnelHost)
 		resp.Body = io.NopCloser(bytes.NewReader(body))
 		resp.ContentLength = int64(len(body))
 		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
@@ -776,7 +790,7 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 		return 0, nil, err
 	}
 
-	srv := &http.Server{Handler: proxy}
+	srv := &http.Server{Handler: withShareStorage(proxy, storage)}
 	go srv.Serve(ln) //nolint:errcheck
 
 	port := ln.Addr().(*net.TCPAddr).Port

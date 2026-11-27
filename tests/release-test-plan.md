@@ -869,6 +869,8 @@ lerd worktree add -b feat-x
       refuses before unlinking, and the site still answers **200**
 - [ ] `lerd unlink --delete-files --yes` on a site holding another linked site
       refuses, naming the inner site, and leaves both folders in place
+- [ ] On a public `lerd share` of a site that keeps its files in RustFS, a
+      bucket file linked from a page points at the tunnel and loads from it
 
 ---
 
