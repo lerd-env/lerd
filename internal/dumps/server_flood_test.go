@@ -78,8 +78,8 @@ func TestServer_QueueHoldsNoMoreThanItsByteBudget(t *testing.T) {
 	prev := queueBytes
 	queueBytes = 10 << 10
 	t.Cleanup(func() { queueBytes = prev })
-	s := startServer(t)
 	reached, release := holdWriter(t)
+	s := startServer(t)
 	t.Cleanup(release)
 	big := strings.Repeat("x", 4<<10)
 	var lines strings.Builder
