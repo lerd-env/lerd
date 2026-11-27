@@ -141,3 +141,24 @@ func TestConstraintsOverlap(t *testing.T) {
 		t.Error("overlap = false, want an empty constraint to constrain nothing")
 	}
 }
+
+// Composer's hyphen range ("8.2 - 8.5", as the Yii 3 app template writes it)
+// was split on its spaces into three exact matches, so nothing satisfied it.
+func TestSatisfiesConstraint_HyphenRange(t *testing.T) {
+	for _, c := range []struct {
+		version, constraint string
+		want                bool
+	}{
+		{"8.2", "8.2 - 8.5", true},
+		{"8.4", "8.2 - 8.5", true},
+		{"8.5", "8.2 - 8.5", true},
+		{"8.1", "8.2 - 8.5", false},
+		{"8.6", "8.2 - 8.5", false},
+		{"8.5", "8.2 - 8.5.3", true},
+		{"8.4", "^7.4 || 8.2 - 8.4", true},
+	} {
+		if got := satisfiesConstraint(c.version, c.constraint); got != c.want {
+			t.Errorf("satisfiesConstraint(%q, %q) = %v, want %v", c.version, c.constraint, got, c.want)
+		}
+	}
+}
