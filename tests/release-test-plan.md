@@ -1376,6 +1376,9 @@ skipped rather than quietly passing it.
       `lerd mcp` exits
 - [ ] Switching back to the container runtime brings every site home,
       **https → 200**
+- [ ] With the debug bridge on, `go run ./tools/bench` finishes all three runs
+      on the native runtime with no 502 or 504, and the Mac's TIME_WAIT count
+      (`netstat -an -p tcp | grep -c TIME_WAIT`) stays in the hundreds during it
 
 ## Phase 15 — plugins
 
