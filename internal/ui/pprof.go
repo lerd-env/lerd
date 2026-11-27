@@ -2,10 +2,9 @@ package ui
 
 import (
 	"net/http"
-	"net/http/pprof"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/pprofhttp"
 )
 
 // handlePprof serves the Go runtime profiling endpoints under /debug/pprof/,
@@ -30,18 +29,5 @@ func handlePprof(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	switch strings.TrimPrefix(r.URL.Path, "/debug/pprof/") {
-	case "cmdline":
-		pprof.Cmdline(w, r)
-	case "profile":
-		pprof.Profile(w, r)
-	case "symbol":
-		pprof.Symbol(w, r)
-	case "trace":
-		pprof.Trace(w, r)
-	default:
-		// Index also serves the named runtime profiles (heap, goroutine,
-		// allocs, block, mutex) from its own path parsing.
-		pprof.Index(w, r)
-	}
+	pprofhttp.Serve(w, r)
 }

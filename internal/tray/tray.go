@@ -226,7 +226,7 @@ func runPoller(ctx context.Context, updateCh chan<- *Snapshot) {
 		}
 	}
 	send()
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(traymenu.PollInterval)
 	defer ticker.Stop()
 	for {
 		select {

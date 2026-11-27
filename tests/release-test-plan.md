@@ -941,6 +941,8 @@ Dashboard (drive it in a browser, not with curl):
       settles; focusing it brings them back
 - [ ] Left open and idle for a minute, the dashboard does not refresh itself
       every second and `lerd-ui` stays near idle in `top`
+- [ ] A service stopped or started with `systemctl --user` outside lerd changes
+      on the open dashboard within a few seconds, not after a minute
 - [ ] Worker button labels stay on one line, the header's corner is rounded
       where it meets the content, and a rail launcher's hover is square
 - [ ] The status sits in the header as a pill and turns red naming what is down

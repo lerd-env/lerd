@@ -51,15 +51,14 @@ type cachedStoreIndex struct {
 // nil when the cache is absent or unreadable (e.g. a fresh machine that has not
 // reached the store yet), so callers fall back to the built-in adapters.
 func loadCachedStoreIndex() *cachedStoreIndex {
-	data, err := os.ReadFile(StoreIndexFile())
-	if err != nil {
-		return nil
-	}
-	var idx cachedStoreIndex
-	if json.Unmarshal(data, &idx) != nil {
-		return nil
-	}
-	return &idx
+	idx, _ := loadStoreFile(StoreIndexFile(), func(data []byte) (*cachedStoreIndex, bool) {
+		var idx cachedStoreIndex
+		if json.Unmarshal(data, &idx) != nil {
+			return nil, false
+		}
+		return &idx, true
+	})
+	return idx
 }
 
 func loadCachedStoreEntries() []cachedStoreEntry {

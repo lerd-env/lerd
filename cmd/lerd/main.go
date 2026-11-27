@@ -520,6 +520,12 @@ func newWatchCmd() *cobra.Command {
 
 			fmt.Println("Lerd watcher started, monitoring:", cfg.ParkedDirectories)
 
+			go func() {
+				if err := watcher.ServePprof(); err != nil {
+					fmt.Printf("[WARN] watcher pprof socket: %v\n", err)
+				}
+			}()
+
 			// Ensure the catch-all default vhost is always present.
 			if err := nginx.EnsureDefaultVhost(); err != nil {
 				fmt.Printf("[WARN] default vhost: %v\n", err)

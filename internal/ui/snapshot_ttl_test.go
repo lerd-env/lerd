@@ -3,6 +3,8 @@ package ui
 import (
 	"testing"
 	"time"
+
+	"github.com/geodro/lerd/internal/traymenu"
 )
 
 func TestCurrentSnapshotTTL_TracksVisibility(t *testing.T) {
@@ -47,5 +49,13 @@ func TestBrokerHasPeers(t *testing.T) {
 	b.remove(ch)
 	if b.hasPeers() {
 		t.Error("broker after remove should report no peers")
+	}
+}
+
+// A TTL at or under the tray's poll is always expired when the next poll
+// lands, so every poll pays a full rebuild while a dashboard is open.
+func TestSnapshotActiveTTLOutlastsTheTrayPoll(t *testing.T) {
+	if snapshotTTLActive <= traymenu.PollInterval {
+		t.Errorf("active TTL %v must outlast the tray poll %v", snapshotTTLActive, traymenu.PollInterval)
 	}
 }
