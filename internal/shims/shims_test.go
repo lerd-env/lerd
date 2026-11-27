@@ -23,7 +23,7 @@ type fakeMgr struct {
 func (m *fakeMgr) ContainerUnitInstalled(name string) bool { return m.installed[name] }
 
 func TestScript(t *testing.T) {
-	got := script("/home/u/.local/bin/lerd", "mysqldump")
+	got := script("/home/u/.local/bin/lerd", "mysqldump", Target{Service: "mysql"})
 	for _, want := range []string{"#!/bin/sh", marker, "client-exec mysqldump", "\"$@\""} {
 		if !strings.Contains(got, want) {
 			t.Errorf("script missing %q:\n%s", want, got)
@@ -60,7 +60,7 @@ func TestValidShimName(t *testing.T) {
 func TestIsShimFile(t *testing.T) {
 	dir := t.TempDir()
 	shim := filepath.Join(dir, "mysqldump")
-	_ = os.WriteFile(shim, []byte(script("lerd", "mysqldump")), 0755)
+	_ = os.WriteFile(shim, []byte(script("lerd", "mysqldump", Target{Service: "mysql"})), 0755)
 	other := filepath.Join(dir, "realtool")
 	_ = os.WriteFile(other, []byte("#!/bin/sh\necho hi\n"), 0755)
 	if !isShimFile(shim) {
@@ -75,7 +75,7 @@ func TestRemoveIfShim(t *testing.T) {
 	dir := t.TempDir()
 	shim := filepath.Join(dir, "psql")
 	user := filepath.Join(dir, "psql-user")
-	_ = os.WriteFile(shim, []byte(script("lerd", "psql")), 0755)
+	_ = os.WriteFile(shim, []byte(script("lerd", "psql", Target{Service: "mysql"})), 0755)
 	_ = os.WriteFile(user, []byte("#!/bin/sh\n"), 0755)
 
 	removeIfShim(shim)
@@ -117,7 +117,7 @@ func TestCanWriteShim(t *testing.T) {
 	}
 
 	ours := filepath.Join(dir, "psql")
-	_ = os.WriteFile(ours, []byte(script("lerd", "psql")), 0755)
+	_ = os.WriteFile(ours, []byte(script("lerd", "psql", Target{Service: "mysql"})), 0755)
 	if !canWriteShim(ours) {
 		t.Error("our own client shim must be overwritable")
 	}
@@ -136,8 +136,8 @@ func TestPruneOrphans(t *testing.T) {
 	live := filepath.Join(binDir, "mysqldump")
 	orphan := filepath.Join(binDir, "pg_dump")
 	user := filepath.Join(binDir, "sqlite3")
-	_ = os.WriteFile(live, []byte(script("lerd", "mysqldump")), 0755)
-	_ = os.WriteFile(orphan, []byte(script("lerd", "pg_dump")), 0755)
+	_ = os.WriteFile(live, []byte(script("lerd", "mysqldump", Target{Service: "mysql"})), 0755)
+	_ = os.WriteFile(orphan, []byte(script("lerd", "pg_dump", Target{Service: "mysql"})), 0755)
 	_ = os.WriteFile(user, []byte("#!/bin/sh\n"), 0755)
 	_ = setDecision("pg_dump", true)
 
@@ -306,7 +306,7 @@ func TestEnabledFollowsTheShimOnDisk(t *testing.T) {
 	}
 
 	_ = os.MkdirAll(config.BinDir(), 0755)
-	_ = os.WriteFile(filepath.Join(config.BinDir(), "mysql"), []byte(script("lerd", "mysql")), 0755)
+	_ = os.WriteFile(filepath.Join(config.BinDir(), "mysql"), []byte(script("lerd", "mysql", Target{Service: "mysql"})), 0755)
 	found := false
 	for _, info := range ServiceShims("mysql-8") {
 		if info.Tool == "mysql" {
@@ -390,5 +390,30 @@ func TestToolCandidates_ReturnsEveryInstalledMatch(t *testing.T) {
 
 	if got := ToolCandidates("mongosh"); got != nil {
 		t.Errorf("ToolCandidates(mongosh) = %v, want nil (no installed service exposes it)", got)
+	}
+}
+
+// pun is lerd's own tool: its shim runs `lerd pun`, it needs no service, and
+// client-exec never resolves it to a container.
+func TestLerdToolShim(t *testing.T) {
+	installMysql(t)
+	if err := Reconcile(nil); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(config.BinDir(), "pun"))
+	if err != nil {
+		t.Fatalf("pun shim not written without a pun on PATH: %v", err)
+	}
+	if !strings.Contains(string(body), "lerd pun \"$@\"") || strings.Contains(string(body), "client-exec") {
+		t.Errorf("pun shim does not dispatch to lerd pun:\n%s", body)
+	}
+	if _, ok := ResolveTarget("pun", ""); ok {
+		t.Error("client-exec resolved pun to a service")
+	}
+	if err := Set("pun", false); err != nil {
+		t.Fatal(err)
+	}
+	if installed("pun") {
+		t.Error("lerd shims remove pun left the shim")
 	}
 }

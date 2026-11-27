@@ -207,7 +207,7 @@ The server also sends short instructions when a client connects, telling the ass
 | `env` | `setup`, `check`, `override` |
 | `runtime` | `versions`, `node_install`, `node_uninstall`, `node_manager`, `php_list`, `ext_list`, `ext_add`, `ext_remove`, `ports_list`, `ports_add`, `ports_remove`, `ini_read`, `ini_write`, `ini_reset` |
 | `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
-| `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
+| `exec` | `artisan`, `console`, `composer`, `pun`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
 | `test` | no action: `file` and `filter` are optional |
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
 | `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `dumps_buffer`, `browser_events`, `browser_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |

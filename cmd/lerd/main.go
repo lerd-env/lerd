@@ -178,6 +178,7 @@ func main() {
 	root.AddCommand(cli.NewNpxCmd())
 	root.AddCommand(cli.NewComposerCmd())
 	root.AddCommand(cli.NewCpxCmd())
+	root.AddCommand(cli.NewPunCmd())
 	root.AddCommand(cli.NewAuthCmd())
 	root.AddCommand(cli.NewServiceCmd())
 	root.AddCommand(cli.NewStatusCmd())

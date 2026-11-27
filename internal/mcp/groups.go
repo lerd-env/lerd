@@ -203,6 +203,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"artisan":        execArtisan,
 		"console":        execArtisan,
 		"composer":       execComposer,
+		"pun":            execPun,
 		"vendor_bins":    execVendorBins,
 		"vendor_run":     execVendorRun,
 		"commands_list":  execCommandsList,
@@ -518,13 +519,13 @@ func workerTool() mcpTool {
 func execTool() mcpTool {
 	return mcpTool{
 		Name:        "exec",
-		Description: "Run tooling in the PHP container (tests: use test). action: artisan (Laravel), console (other frameworks), composer, vendor_bins (list vendor/bin), vendor_run (pint, phpstan…), commands_list, commands_run, command_add, command_remove.",
+		Description: "Run project tooling (tests: use test). action: artisan (Laravel), console (other frameworks), composer, pun (PHP lint/format), vendor_bins, vendor_run (pint, phpstan…), commands_list, commands_run, command_add, command_remove.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":         {Type: "string", Enum: []string{"artisan", "console", "composer", "vendor_bins", "vendor_run", "commands_list", "commands_run", "command_add", "command_remove"}},
+				"action":         {Type: "string", Enum: []string{"artisan", "console", "composer", "pun", "vendor_bins", "vendor_run", "commands_list", "commands_run", "command_add", "command_remove"}},
 				"path":           {Type: "string", Description: "Project root. Defaults to cwd."},
-				"args":           {Type: "array", Items: stringItems, Description: `artisan/console/composer: argv, e.g. ["migrate"].`},
+				"args":           {Type: "array", Items: stringItems, Description: `artisan/console/composer/pun: argv, e.g. ["migrate"].`},
 				"bin":            {Type: "string", Description: "vendor_run: binary name."},
 				"site":           {Type: "string", Description: "commands_*/command_*: site name."},
 				"name":           {Type: "string", Description: "commands_run/command_*: command name."},

@@ -66,13 +66,16 @@ func validBinaries(bins []string) []string {
 	return out
 }
 
-// Target records which service container a tool shim execs into and the
-// candidate binaries to resolve there (mariadb images ship mariadb-dump in
-// place of mysqldump, so the shim tries each in order).
+// Target records the service container a shim execs into and the candidate
+// binaries to try there (mariadb ships mariadb-dump for mysqldump). A tool lerd
+// runs itself has no service and dispatches to `lerd <tool>` instead.
 type Target struct {
 	Service  string
 	Binaries []string
 }
+
+// lerdTools are the shims for tools lerd fetches and runs itself, such as pun.
+var lerdTools = []string{"pun"}
 
 // Info is the per-tool shim state the CLI and web UI render: which service
 // backs it, whether the host already has the tool (so callers can warn before
@@ -96,10 +99,14 @@ type Info struct {
 type Prompter func(tool string) (enable, decided bool)
 
 // script renders the host shim: a trivial pass-through into
-// `lerd client-exec <tool>`, so args, stdin, stdout and exit code all behave
-// exactly like the native binary an IDE would call.
-func script(lerdBin, tool string) string {
-	return "#!/bin/sh\n# " + marker + "\nexec " + lerdBin + " client-exec " + tool + " \"$@\"\n"
+// `lerd client-exec <tool>`, or `lerd <tool>` for a lerd tool, so args, stdin,
+// stdout and exit code all behave exactly like the native binary.
+func script(lerdBin, tool string, t Target) string {
+	cmd := " client-exec " + tool
+	if t.Service == "" {
+		cmd = " " + tool
+	}
+	return "#!/bin/sh\n# " + marker + "\nexec " + lerdBin + cmd + " \"$@\"\n"
 }
 
 // Targets maps every client tool exposed by an installed service to the
@@ -108,6 +115,9 @@ func script(lerdBin, tool string) string {
 // `mysql` resolve deterministically.
 func Targets() map[string]Target {
 	out := map[string]Target{}
+	for _, t := range lerdTools {
+		out[t] = Target{}
+	}
 	for _, name := range installedServiceNames() {
 		svc, err := loadServiceDef(name)
 		if err != nil || svc == nil {
@@ -235,7 +245,7 @@ func ResolveTarget(tool, prefer string) (Target, bool) {
 		}
 	}
 	t, ok := Targets()[tool]
-	return t, ok
+	return t, ok && t.Service != ""
 }
 
 // serviceTarget returns the Target for a tool as declared by a specific
@@ -285,16 +295,25 @@ func List() []Info {
 // installed service actually exposes the tool, applies the change to the shim
 // dir, and only records the decision once that succeeded, so a toggle that
 // could not be carried out never reads back as done. It never prompts.
-func Set(tool string, enabled bool) error {
-	if _, ok := Targets()[tool]; !ok {
-		return fmt.Errorf("no installed service exposes the %q client tool", tool)
+func Set(requested string, enabled bool) error {
+	// The name is taken from the targets, not the request, so only a known
+	// tool name ever reaches a path.
+	var tool string
+	var target Target
+	for name, t := range Targets() {
+		if name == requested {
+			tool, target = name, t
+		}
+	}
+	if tool == "" {
+		return fmt.Errorf("no installed service exposes the %q client tool", requested)
 	}
 	lerdBin := config.LerdBinary()
 	binDir := config.BinDir()
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return err
 	}
-	if err := apply(lerdBin, binDir, tool, enabled); err != nil {
+	if err := apply(lerdBin, binDir, tool, target, enabled); err != nil {
 		return err
 	}
 	return recordDecision(tool, enabled)
@@ -316,9 +335,9 @@ func Reconcile(prompt Prompter) error {
 
 	targets := Targets()
 	var errs []error
-	for tool := range targets {
+	for tool, target := range targets {
 		enabled, decided := decide(tool, prompt)
-		if err := apply(lerdBin, binDir, tool, enabled); err != nil {
+		if err := apply(lerdBin, binDir, tool, target, enabled); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -336,7 +355,7 @@ func Reconcile(prompt Prompter) error {
 // enabled, take ours away when not. An enable whose target path is held by a
 // file lerd will not overwrite is an error rather than a silent skip, so the
 // caller can say why the tool did not appear on PATH.
-func apply(lerdBin, binDir, tool string, enabled bool) error {
+func apply(lerdBin, binDir, tool string, target Target, enabled bool) error {
 	path := filepath.Join(binDir, tool)
 	if !enabled {
 		return removeIfShim(path)
@@ -344,7 +363,7 @@ func apply(lerdBin, binDir, tool string, enabled bool) error {
 	if !canWriteShim(path) {
 		return fmt.Errorf("%s already exists and is not a lerd shim, so the %s shim was not installed; remove that file first", path, tool)
 	}
-	return os.WriteFile(path, []byte(script(lerdBin, tool)), 0755)
+	return os.WriteFile(path, []byte(script(lerdBin, tool, target)), 0755)
 }
 
 // decide resolves whether a tool's shim should be installed. A recorded decision

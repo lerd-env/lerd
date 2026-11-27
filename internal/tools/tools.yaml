@@ -47,6 +47,27 @@ tools:
       linux/arm64: 7142777
       darwin/amd64: 7142777
       darwin/arm64: 7142777
+  # pun, the Rust PHP toolchain (format, lint, analyse, composer installs) behind
+  # `lerd pun`. A static binary that runs on the host, fetched on the first run
+  # rather than up front; its composer scripts reach PHP through lerd's php shim.
+  pun:
+    version: v0.4.3
+    url: https://github.com/shipfastlabs/pun/releases/download/{version}/{asset}
+    assets:
+      linux/amd64: punphp-x86_64-unknown-linux-musl.tar.gz
+      linux/arm64: punphp-aarch64-unknown-linux-musl.tar.gz
+      darwin/amd64: punphp-x86_64-apple-darwin.tar.gz
+      darwin/arm64: punphp-aarch64-apple-darwin.tar.gz
+    digests:
+      linux/amd64: 5697fc1870c9ed725fa9646ae99e683a6ac5b915268d2eed56b0722fc9e7946d
+      linux/arm64: b21bfa26d5090120e7afce72445baea59853b7fe22b86949d37e06c4052d623f
+      darwin/amd64: 0ccfa1c405a5f7d3e36fc51370e708bba11132f466c0a54f586cf5087dea92fe
+      darwin/arm64: c003de3fd494ea0651f7a950fdb1c37b2d2e314353ec5f35394bd4b8648b909a
+    sizes:
+      linux/amd64: 30227550
+      linux/arm64: 28124070
+      darwin/amd64: 29383763
+      darwin/arm64: 28182223
   # The PHP a host command falls back to when the runtime a project bundles is
   # short an extension it needs. Full static builds rather than trimmed ones, one
   # per PHP minor because the command runs a project's own code and its

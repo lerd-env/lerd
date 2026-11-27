@@ -436,7 +436,7 @@ Set `ide_data_source: false` in `~/.config/lerd/config.yaml` to leave IDE files 
 
 ### Managing shims
 
-List the shims your installed services expose and whether each is installed:
+List the shims your installed services expose, plus lerd's own `pun` shim, and whether each is installed:
 
 ```bash
 lerd shims

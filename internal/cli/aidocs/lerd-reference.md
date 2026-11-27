@@ -102,8 +102,8 @@ Actions: `list` (CALL FIRST), `start`, `stop`, `add`, `remove`, `health`, `heal`
 - **Idle-suspend (CLI-only)**: `lerd idle on/off` toggles activity-driven suspension globally; suspended workers stop after the idle timeout (`lerd idle timeout <dur>`) and resume on the next request/CLI/MCP/file-save. `lerd idle pin/unpin <site>` exempts a site; `lerd idle status` reports policy and last-active. A worker shown as suspended is healthy, not failed, so do not `heal` it. `lerd idle services on` sleeps idle services too; any request or tool call wakes one, so never `start` or reinstall it
 
 #### `exec` — run tooling in the PHP-FPM container
-Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove`.
-- `artisan`/`console`/`composer` take `args` (array); tinker needs `--execute=<code>`
+Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `pun`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove`.
+- `artisan`/`console`/`composer`/`pun` take `args` (array); tinker needs `--execute=<code>`
 - **Tests: the `test` tool**, not vendor_run or a shell: no arguments runs all; `file`, `filter` narrow
 - `vendor_run` runs other tooling (pint, phpstan): `vendor_bins`, then `bin` + `args`. `lerd cpx <package>` (CLI-only) runs a package's binary without adding it
 - `commands_*`/`command_*` list, run, add and remove the on-demand commands in a site's `.lerd.yaml` `commands:` block; `commands_run` needs `force: true` for confirm-gated commands
