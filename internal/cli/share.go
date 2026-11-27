@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -272,14 +273,16 @@ func shareTargetFor(site *config.Site, branch string) (shareTarget, error) {
 	name, path := site.Name, site.Path
 	if branch != "" {
 		name = site.Name + "-" + gitpkg.SanitizeBranch(branch)
-		// a worktree keeps its own .env, and with it a bucket of its own
-		if wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain()); err == nil {
-			for _, wt := range wts {
-				if wt.Branch == branch {
-					path = wt.Path
-				}
-			}
+		// a worktree keeps its own env file, and with it a bucket of its own
+		wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+		if err != nil {
+			return shareTarget{}, fmt.Errorf("detecting worktrees: %w", err)
 		}
+		i := slices.IndexFunc(wts, func(wt gitpkg.Worktree) bool { return wt.Branch == branch })
+		if i < 0 {
+			return shareTarget{}, fmt.Errorf("no worktree for branch %q on %s", branch, site.Name)
+		}
+		path = wts[i].Path
 	}
 	return shareTarget{name: name, domain: domain, secured: site.Secured, storage: siteShareStorage(path)}, nil
 }
