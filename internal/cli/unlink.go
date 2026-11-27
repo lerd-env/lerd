@@ -43,23 +43,36 @@ func init() {
 	}
 }
 
+// UnlinkOptions extends an unlink. DeleteDir also deletes the project directory,
+// and Confirmed skips asking first, for callers that already asked.
+type UnlinkOptions struct {
+	DeleteDir bool
+	Confirmed bool
+}
+
 // NewUnlinkCmd returns the unlink command.
 func NewUnlinkCmd() *cobra.Command {
-	return &cobra.Command{
+	var opts UnlinkOptions
+	cmd := &cobra.Command{
 		Use:   "unlink [name]",
 		Short: "Unlink a site, defaulting to the one in the current directory",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  runUnlink,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runUnlink(args, opts)
+		},
 	}
+	cmd.Flags().BoolVar(&opts.DeleteDir, "delete-files", false, "Also delete the project directory from disk")
+	cmd.Flags().BoolVar(&opts.Confirmed, "yes", false, "With --delete-files, delete without asking")
+	return cmd
 }
 
-func runUnlink(_ *cobra.Command, args []string) error {
+func runUnlink(args []string, opts UnlinkOptions) error {
 	// Naming the site is the only way to unlink one whose directory has moved
 	// or been deleted, and the only way to pick between two registrations that
 	// point at the same directory.
 	if len(args) == 1 {
 		feedback.Begin()
-		unlinkErr := UnlinkSite(args[0])
+		unlinkErr := UnlinkSiteWith(args[0], opts)
 		feedback.Begin()
 		return unlinkErr
 	}
@@ -72,7 +85,7 @@ func runUnlink(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("no site registered for %s — link it first with lerd link", cwd)
 	}
 	feedback.Begin()
-	unlinkErr := UnlinkSite(site.Name)
+	unlinkErr := UnlinkSiteWith(site.Name, opts)
 	feedback.Begin()
 	return unlinkErr
 }
@@ -81,9 +94,20 @@ func runUnlink(_ *cobra.Command, args []string) error {
 // directory, the registry entry is kept but marked Ignored so the watcher does not
 // re-register it. For manually-linked sites the entry is removed entirely.
 func UnlinkSite(name string) error {
+	return UnlinkSiteWith(name, UnlinkOptions{})
+}
+
+// UnlinkSiteWith is UnlinkSite with options. The directory is checked and
+// confirmed before anything is unlinked, and deleted only once the unlink is done.
+func UnlinkSiteWith(name string, opts UnlinkOptions) error {
 	site, err := config.FindSite(name)
 	if err != nil {
 		return fmt.Errorf("site %q not found", name)
+	}
+	if opts.DeleteDir {
+		if err := confirmDeleteSiteDir(site, opts.Confirmed); err != nil {
+			return err
+		}
 	}
 
 	// Workers are stopped by UnlinkSiteCore via the siteops.StopSiteWorkers
@@ -125,6 +149,46 @@ func UnlinkSite(name string) error {
 	autoStopUnusedServices()
 	autoStopUnusedFPMs()
 
+	if opts.DeleteDir {
+		step := feedback.Start("deleting " + site.Path)
+		if err := siteops.RemoveSiteDir(site.Name, site.Path, parkedDirs); err != nil {
+			step.Fail(err)
+			return fmt.Errorf("%s is unlinked, but its directory was not deleted: %w", name, err)
+		}
+		step.OK("")
+	}
+	return nil
+}
+
+// confirmDeleteSiteDir refuses a directory lerd must not delete, then names what
+// goes with it and has the site's name typed back unless the caller confirmed.
+func confirmDeleteSiteDir(site *config.Site, confirmed bool) error {
+	r := siteops.ReportSiteDir(site.Path, site.PrimaryDomain())
+	if r.Refused != "" {
+		return fmt.Errorf("not deleting the directory: %s", r.Refused)
+	}
+	if confirmed {
+		return nil
+	}
+	feedback.Line("this deletes " + r.Path + " from disk")
+	for _, wt := range r.InsideWorktrees {
+		feedback.Line("  with the worktree " + wt)
+	}
+	for _, wt := range r.OutsideWorktrees {
+		feedback.Warn("the worktree %s stays, but its git data goes with the project", wt)
+	}
+	for _, dir := range r.Uncommitted {
+		feedback.Warn("%s has uncommitted changes", dir)
+	}
+	if r.Unpushed > 0 {
+		feedback.Warn("%d commits are on no remote", r.Unpushed)
+	}
+	if !isInteractive() {
+		return fmt.Errorf("not deleting %s without a terminal to confirm, pass --yes", r.Path)
+	}
+	if feedback.Ask("Type "+site.Name+" to delete it:") != site.Name {
+		return fmt.Errorf("not deleting %s, the name did not match", r.Path)
+	}
 	return nil
 }
 
