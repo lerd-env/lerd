@@ -137,7 +137,8 @@ func registeredSitePaths() []string {
 }
 
 // CheckSiteDir refuses a directory lerd must never delete: anything not inside a
-// folder its containers mount, one of those folders itself, or lerd's own files.
+// folder its containers mount, one of those folders, lerd's own files, or a
+// folder holding another linked site.
 // It returns where the path really leads, which is what may then be deleted.
 func CheckSiteDir(path string, parkedDirs, sitePaths []string) (string, error) {
 	roots := []string{}
@@ -179,6 +180,12 @@ func checkSiteDirDeletable(path string, roots, projects, protected []string) (st
 		p = resolved(p)
 		if within(target, p) || within(p, target) {
 			return "", fmt.Errorf("%s holds lerd's own files", path)
+		}
+	}
+	// Another linked site inside would lose its files and go on being served.
+	for _, project := range projects {
+		if p := resolved(project); p != target && within(p, target) {
+			return "", fmt.Errorf("%s holds the linked site at %s, unlink that first", path, project)
 		}
 	}
 	inside := false

@@ -379,6 +379,13 @@ if mkdir "$delpark" && made+=("$delpark") && mkdir "$holder" && made+=("$holder"
 	check_out "8.31 unlink --delete-files refuses a site holding a parked directory" 'holds a folder lerd mounts' lerd unlink "$held" --delete-files --yes
 	expect_200 8.31 "$(site_url "$holder")"
 	lerd unpark "$holder/inner" </dev/null >/dev/null 2>&1
+
+	mkdeletable "$holder/admin"
+	(cd "$holder/admin" && lerd link </dev/null >/dev/null 2>&1)
+	admin=$(site_name "$holder/admin")
+	check_out "8.32 unlink --delete-files refuses a site holding another linked site" 'holds the linked site' lerd unlink "$held" --delete-files --yes
+	check "8.32 and leaves both folders in place" test -d "$holder/admin/public"
+	lerd unlink "$admin" </dev/null >/dev/null 2>&1
 	lerd unlink "$held" </dev/null >/dev/null 2>&1
 	lerd unpark "$delpark" </dev/null >/dev/null 2>&1
 else

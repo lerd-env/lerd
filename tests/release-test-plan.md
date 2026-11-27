@@ -864,6 +864,8 @@ lerd worktree add -b feat-x
       drops it from `lerd sites`
 - [ ] `lerd unlink --delete-files --yes` on a site holding a parked directory
       refuses before unlinking, and the site still answers **200**
+- [ ] `lerd unlink --delete-files --yes` on a site holding another linked site
+      refuses, naming the inner site, and leaves both folders in place
 
 ---
 

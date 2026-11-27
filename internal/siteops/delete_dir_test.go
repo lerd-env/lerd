@@ -257,3 +257,21 @@ func TestReportSiteDirCountsCommitsOnlyASubmoduleHolds(t *testing.T) {
 		t.Errorf("unpushed = %d, want %d plus the commit only the submodule branch holds", r.Unpushed, before)
 	}
 }
+
+// Another linked site inside the folder would lose its files and go on being
+// served from a folder that no longer exists, so it is refused until unlinked.
+func TestCheckSiteDirRefusesAFolderHoldingAnotherSite(t *testing.T) {
+	root := resolvedTempDir(t)
+	project := filepath.Join(root, "Code", "mono")
+	inner := filepath.Join(project, "apps", "admin")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := checkSiteDirDeletable(project, []string{root}, []string{project, inner}, nil)
+	if err == nil || !strings.Contains(err.Error(), inner) {
+		t.Errorf("a folder holding another linked site must be refused, naming it, got %v", err)
+	}
+	if _, err := checkSiteDirDeletable(project, []string{root}, []string{project}, nil); err != nil {
+		t.Errorf("the site's own path must not count as another site: %v", err)
+	}
+}
