@@ -3,6 +3,7 @@ package nativephp
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -462,5 +463,24 @@ func TestWriteCABundleSurvivesConcurrentWriters(t *testing.T) {
 		if err := <-errs; err != nil {
 			t.Errorf("concurrent writeCABundle: %v", err)
 		}
+	}
+}
+
+// nginx keeps up to 8 connections per worker to a native pool, and each one
+// holds a PHP worker while it is open, so a pool smaller than that starves
+// requests on one nginx worker behind another's idle connections.
+func TestFPMConfigFitsNginxsKeptConnections(t *testing.T) {
+	got, err := FPMConfig("8.4", "/tmp/x.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var children int
+	for _, line := range strings.Split(got, "\n") {
+		if v, ok := strings.CutPrefix(line, "pm.max_children = "); ok {
+			children, _ = strconv.Atoi(v)
+		}
+	}
+	if children < 8*16 {
+		t.Errorf("pm.max_children = %d, want room for 8 kept connections on each of 16 nginx workers", children)
 	}
 }

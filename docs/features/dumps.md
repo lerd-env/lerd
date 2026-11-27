@@ -47,7 +47,7 @@ Ray's own transport still runs and still fails to reach anything, which costs a 
 
 ## Wire format
 
-Each event is one line of JSON. A request writes all of its events down one connection that it opens on the first one and closes when it ends, and a long-running worker reopens its connection whenever lerd has closed it for sitting idle. The shape is stable from v1 of the protocol:
+Each event is one line of JSON. A PHP worker writes its events down one connection that it opens on the first one and keeps across requests, and reopens it whenever lerd has closed it for sitting idle. On macOS the connection is TCP, and one closed at the end of every request left a port behind for each, enough under load to run the Mac out of them. The shape is stable from v1 of the protocol:
 
 ```json
 {

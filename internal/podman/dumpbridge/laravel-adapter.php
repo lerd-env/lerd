@@ -52,9 +52,9 @@ function target(): string
     return (is_string($h) && $h !== '') ? $h : '';
 }
 
-// send ships one event on this request's connection, opened on first use. One
-// lerd-ui closed for idling is reopened, and a short write closes it, or the
-// next event would land mid-line.
+// send ships one event on the worker's connection, kept across requests since
+// one closed per request left a TCP port in TIME_WAIT on macOS. One lerd-ui closed
+// for idling is reopened; a short write closes it so no event lands mid-line.
 function send(array $payload): void
 {
     static $sock = null, $pid = 0;
@@ -78,7 +78,7 @@ function send(array $payload): void
     for ($attempt = 0; $attempt < 2; $attempt++) {
         $fresh = $sock === null;
         if ($fresh) {
-            $sock = @\stream_socket_client($t, $errno, $errstr, 0.05, \STREAM_CLIENT_CONNECT) ?: null;
+            $sock = @\stream_socket_client($t, $errno, $errstr, 0.05, \STREAM_CLIENT_CONNECT | \STREAM_CLIENT_PERSISTENT) ?: null;
             if ($sock === null) {
                 return;
             }

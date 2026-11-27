@@ -631,6 +631,9 @@ func writeSiteConf(name string, rendered []byte) error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
+	if err := ensureNativeUpstreamsFor(rendered); err != nil {
+		return err
+	}
 	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
 	return WriteFileAtomic(confPath, rendered, 0644)
@@ -929,6 +932,9 @@ func writeConfD(domain string, rendered []byte) error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
+	if err := ensureNativeUpstreamsFor(rendered); err != nil {
+		return err
+	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
 	return WriteFileAtomic(confPath, rendered, 0644)
@@ -1028,6 +1034,9 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 		return err
 	}
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		return err
+	}
+	if err := ensureNativeUpstreamsFor(rendered); err != nil {
 		return err
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
@@ -1491,8 +1500,8 @@ func RepairVhosts() []VhostRepair {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".conf") {
 			continue
 		}
-		// Skip internal configs (default catch-all and lerd dashboard proxy).
-		if entry.Name() == "_default.conf" || entry.Name() == "lerd.localhost.conf" {
+		// Skip internal configs (default catch-all, lerd dashboard proxy, native pools).
+		if entry.Name() == "_default.conf" || entry.Name() == "lerd.localhost.conf" || entry.Name() == nativeUpstreamsFile {
 			continue
 		}
 		// A service domain is served by no site, so the orphan rule below would
