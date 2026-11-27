@@ -126,6 +126,9 @@ func Start(currentVersion string) error {
 	// IsActive) read from the cache instead of spawning per-container
 	// podman inspect subprocesses.
 	podman.Cache.Start(context.Background())
+	// Container state arrives as events; the poll below becomes a slow resync
+	// while the stream is up, and takes over again whenever it is not.
+	podman.Cache.WatchEvents(context.Background())
 
 	// Follow the desktop theme where there is one. The error is the ordinary
 	// answer on a machine with no desktop to read, so it is dropped rather than

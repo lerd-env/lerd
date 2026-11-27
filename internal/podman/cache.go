@@ -2,6 +2,7 @@ package podman
 
 import (
 	"context"
+	"io"
 	"maps"
 	"strings"
 	"sync"
@@ -31,6 +32,11 @@ type ContainerCache struct {
 	// background loop skips its podman ps call so a worker-mode migration
 	// doesn't compete with the cache poller for podman API connections.
 	pauseCount int32
+
+	// eventsLive is true while the podman events stream is open, which lets
+	// the loop poll only as a slow resync. eventsFn opens it; nil means podman.
+	eventsLive atomic.Bool
+	eventsFn   func(ctx context.Context) (io.ReadCloser, error)
 
 	// pollFn fetches container states; defaults to the real podman ps call.
 	// Swappable in tests.
@@ -203,7 +209,7 @@ func (c *ContainerCache) loop(ctx context.Context) {
 	var lastStopped map[string]bool
 	for {
 		c.intervalMu.Lock()
-		d := c.interval
+		d := effectiveInterval(c.interval, c.eventsLive.Load())
 		c.intervalMu.Unlock()
 
 		select {
