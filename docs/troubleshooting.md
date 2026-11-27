@@ -91,6 +91,12 @@ curl -o /tmp/lerd-heap.prof http://127.0.0.1:7073/debug/pprof/heap
 curl 'http://127.0.0.1:7073/debug/pprof/goroutine?debug=1' | head -50
 ```
 
+The watcher daemon answers the same requests on a unix socket instead of a port, behind the same marker:
+
+```bash
+curl --unix-socket ~/.local/share/lerd/run/watcher-pprof.sock -o /tmp/watcher-cpu.prof 'http://watcher/debug/pprof/profile?seconds=30'
+```
+
 Read a profile by passing the binary alongside it, or just attach the file to the issue:
 
 ```bash
