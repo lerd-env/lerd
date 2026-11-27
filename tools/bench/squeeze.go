@@ -103,7 +103,7 @@ func sharersOf(sitesOutput, php string) []string {
 	var out []string
 	for i, l := range strings.Split(sitesOutput, "\n") {
 		f := strings.Fields(l)
-		if i == 0 || len(f) < 3 || strings.HasPrefix(f[0], "↳") || benchFixtures[f[0]] {
+		if i == 0 || len(f) < 3 || strings.HasPrefix(f[0], "↳") || benchOwnedRow(l) {
 			continue
 		}
 		if f[2] == php {
@@ -130,8 +130,7 @@ func lowestPassing(levels, p95s []float64, limit float64) float64 {
 // linkLaravel scaffolds the framework fixture once, links it for the run and
 // returns its URL; the unlink is registered the moment the link exists.
 func linkLaravel() (string, error) {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, "Lerd", laravelFixture)
+	dir := fixtureDir(laravelFixture)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		step("scaffolding " + dir + " (once)")
 		// lerd new links what it scaffolds, so this run owns that link too.

@@ -302,6 +302,13 @@ func claimFixtureDir(dir string) error {
 // with the run's cleanup the moment the link exists.
 func linkSite(name, dir string) error {
 	if _, ok := siteDomain(name); ok {
+		// A site by that name somewhere else is the user's, not a fixture.
+		out, _ := runCmd("lerd", "sites")
+		for _, l := range strings.Split(out, "\n") {
+			if f := strings.Fields(l); len(f) > 0 && f[0] == name && !benchOwnedRow(l) {
+				return fmt.Errorf("a site named %s already exists outside %s; unlink or rename it first", name, dir)
+			}
+		}
 		return nil
 	}
 	return cleanup.guard(func() (func(), error) {
@@ -349,8 +356,7 @@ func siteURL(name string) (string, error) {
 
 // linkFixture links a one-line PHP site for the run and returns its URL.
 func linkFixture() (string, error) {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, "Lerd", fixtureName)
+	dir := fixtureDir(fixtureName)
 	if err := claimFixtureDir(dir); err != nil {
 		return "", err
 	}

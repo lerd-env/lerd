@@ -387,9 +387,24 @@ func lerdVersion() string {
 	return strings.TrimSpace(strings.TrimPrefix(out, "lerd version "))
 }
 
-// benchFixtures are the sites the bench links itself; they are never the
-// user's, so counts and the shared-PHP check leave them out.
+// benchFixtures are the sites the bench links itself, under fixtureRoot.
 var benchFixtures = map[string]bool{fixtureName: true, laravelFixture: true}
+
+// fixtureRoot holds the fixture folders, a var so tests can move it.
+var fixtureRoot = func() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Lerd")
+}()
+
+func fixtureDir(name string) string { return filepath.Join(fixtureRoot, name) }
+
+// benchOwnedRow reports whether a `lerd sites` row is one of the bench's own
+// fixtures: the name and the folder both match, so a user's site that only
+// shares the name still counts as theirs.
+func benchOwnedRow(line string) bool {
+	f := strings.Fields(line)
+	return len(f) > 0 && benchFixtures[f[0]] && strings.HasSuffix(strings.TrimSpace(line), fixtureDir(f[0]))
+}
 
 // userSiteCount counts the user's sites in `lerd sites`, without the header,
 // alias lines or the bench's own fixtures.
@@ -397,7 +412,7 @@ func userSiteCount(sitesOutput string) int {
 	n := 0
 	for i, l := range strings.Split(strings.TrimSpace(sitesOutput), "\n") {
 		f := strings.Fields(l)
-		if i == 0 || len(f) == 0 || strings.HasPrefix(f[0], "↳") || benchFixtures[f[0]] {
+		if i == 0 || len(f) == 0 || strings.HasPrefix(f[0], "↳") || benchOwnedRow(l) {
 			continue
 		}
 		n++

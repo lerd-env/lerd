@@ -186,12 +186,17 @@ func TestSharersOf(t *testing.T) {
 		"shop  shop.test  8.4  22  Yes  Laravel 12  running  /h/shop\n" +
 		"blog  blog.test  8.5  22  No  Laravel 12  running  /h/blog\n" +
 		"↳ alias  crisu.test\n"
+	old := fixtureRoot
+	fixtureRoot = "/h/Lerd"
+	t.Cleanup(func() { fixtureRoot = old })
+	// A user's own site under a fixture's name, elsewhere, is still the user's.
+	sites += "bench-fixture  bench-fixture.local  8.4  22  No    running  /home/u/work/bench-fixture\n"
 	// The run's own fixtures are not other sites, whichever PHP they landed on.
-	if got := sharersOf(sites, "8.4"); len(got) != 1 || got[0] != "shop" {
-		t.Errorf("sharersOf = %v; want [shop]", got)
+	if got := sharersOf(sites, "8.4"); len(got) != 2 || got[0] != "shop" || got[1] != "bench-fixture" {
+		t.Errorf("sharersOf = %v; want [shop bench-fixture]", got)
 	}
-	if got := userSiteCount(sites); got != 2 {
-		t.Errorf("userSiteCount = %d; want 2, the fixtures and the alias left out", got)
+	if got := userSiteCount(sites); got != 3 {
+		t.Errorf("userSiteCount = %d; want 3, the bench's fixtures and the alias left out", got)
 	}
 	if got := sharersOf(sites, "8.3"); len(got) != 0 {
 		t.Errorf("sharersOf on an unused version = %v; want none", got)
