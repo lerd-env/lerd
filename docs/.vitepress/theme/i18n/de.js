@@ -93,6 +93,16 @@ export default {
       'Lerd läuft in WSL2 mit derselben CLI, demselben Dashboard, denselben Diensten und demselben MCP-Server. Der Windows-Installer richtet alles ein, und die WSL2-Anleitung beschreibt jeden Schritt.',
     ],
   },
+  desktop: {
+    label: "Desktop-App", h: ["Lerd,", "als Desktop-App."],
+    lead: "Eine optionale Begleit-App, die das Dashboard in einem eigenen Fenster öffnet und Lerds Benachrichtigungen nativ anzeigt. Lerd funktioniert auch ohne sie genauso.",
+    arm: "Apple Silicon", intel: "Intel", windows: "Windows-Installer",
+    items: [
+      "Von Apple signiert und notarisiert, öffnet sich also ohne Warnung und aktualisiert sich selbst. Der Installer bietet sie auch an.",
+      "Ein Flatpak aus Lerds eigenem Repository, aktuell gehalten durch flatpak update oder deine Softwareverwaltung.",
+      "Bereits im Windows-Installer enthalten, es gibt nichts zusätzlich herunterzuladen.",
+    ],
+  },
   principles: {
     label: 'Prinzipien', h: ['Wie Lerd', 'gebaut ist.'],
     items: [

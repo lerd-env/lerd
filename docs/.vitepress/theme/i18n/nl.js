@@ -93,6 +93,16 @@ export default {
       'Lerd draait in WSL2 met dezelfde CLI, hetzelfde dashboard, dezelfde diensten en dezelfde MCP-server. De Windows-installer regelt alles, en de WSL2-gids beschrijft elke stap.',
     ],
   },
+  desktop: {
+    label: "Desktop-app", h: ["Lerd,", "als desktop-app."],
+    lead: "Een optionele begeleidende app die het dashboard in een eigen venster opent en de meldingen van Lerd native toont. Lerd werkt zonder de app precies hetzelfde.",
+    arm: "Apple silicon", intel: "Intel", windows: "Windows-installer",
+    items: [
+      "Ondertekend en genotariseerd door Apple, dus hij opent zonder waarschuwing, en hij werkt zichzelf bij. De installer biedt hem ook aan.",
+      "Een Flatpak uit de eigen repository van Lerd, bijgehouden door flatpak update of je softwarecentrum.",
+      "Al onderdeel van de Windows-installer, er hoeft niets extra gedownload te worden.",
+    ],
+  },
   principles: {
     label: 'Principes', h: ['Hoe Lerd', 'gebouwd is.'],
     items: [

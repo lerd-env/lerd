@@ -136,6 +136,16 @@ export const PLATFORMS = [
   { name: 'Windows', status: 'WSL2', href: '/getting-started/wsl2' },
 ]
 
+/* ---- Desktop app, copy in i18n desktop.items in the same order (macOS, Linux, Windows) ---- */
+const DESKTOP_RELEASE = 'https://github.com/lerd-env/lerd-desktop/releases/latest/download/'
+export const DESKTOP = {
+  // Same command install.sh offers, so the two never drift.
+  flatpak: 'flatpak install --user https://lerd.sh/lerd.flatpakref',
+  macArm: DESKTOP_RELEASE + 'Lerd-arm64.dmg',
+  macIntel: DESKTOP_RELEASE + 'Lerd-x64.dmg',
+  badges: ['DMG', 'FLATPAK', 'EXE'],
+}
+
 /* ---- Services showcase ---- */
 export const SVC_SHOW = [
   { logo: 'mysql',    name: 'MySQL',       port: ':3306' },

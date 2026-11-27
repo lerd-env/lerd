@@ -93,6 +93,16 @@ export default {
       'Lerd WSL2 içinde aynı CLI, panel, servisler ve MCP sunucusuyla çalışır. Windows yükleyicisi her şeyi kurar, WSL2 rehberi de her adımı anlatır.',
     ],
   },
+  desktop: {
+    label: "Masaüstü uygulaması", h: ["Lerd,", "masaüstü uygulaması olarak."],
+    lead: "Paneli kendi penceresinde açan ve Lerd'in bildirimlerini yerel olarak gösteren isteğe bağlı bir yardımcı uygulama. Lerd onsuz da aynı şekilde çalışır.",
+    arm: "Apple silicon", intel: "Intel", windows: "Windows yükleyicisi",
+    items: [
+      "Apple tarafından imzalı ve onaylı, bu yüzden uyarısız açılır ve kendini günceller. Yükleyici de bunu sunar.",
+      "Lerd'in kendi deposundan bir Flatpak, flatpak update veya yazılım merkezinizle güncel kalır.",
+      "Windows yükleyicisinde zaten var, ayrıca indirilecek bir şey yok.",
+    ],
+  },
   principles: {
     label: 'İlkeler', h: ['Lerd nasıl', 'inşa edildi.'],
     items: [

@@ -93,6 +93,16 @@ export default {
       'Lerd chạy bên trong WSL2 với cùng CLI, bảng điều khiển, dịch vụ và máy chủ MCP. Trình cài đặt Windows thiết lập mọi thứ, và hướng dẫn WSL2 giải thích từng bước.',
     ],
   },
+  desktop: {
+    label: "Ứng dụng desktop", h: ["Lerd,", "dưới dạng ứng dụng desktop."],
+    lead: "Một ứng dụng đi kèm tùy chọn, mở bảng điều khiển trong cửa sổ riêng và hiển thị thông báo của Lerd theo kiểu gốc. Không có nó, Lerd vẫn hoạt động như cũ.",
+    arm: "Apple silicon", intel: "Intel", windows: "Trình cài đặt Windows",
+    items: [
+      "Được Apple ký và công chứng nên mở không có cảnh báo, và tự cập nhật. Trình cài đặt cũng đề xuất nó.",
+      "Một gói Flatpak từ kho riêng của Lerd, luôn mới nhờ flatpak update hoặc trung tâm phần mềm của bạn.",
+      "Đã có sẵn trong trình cài đặt Windows, không cần tải thêm gì.",
+    ],
+  },
   principles: {
     label: 'Nguyên tắc', h: ['Lerd được xây dựng', 'như thế nào.'],
     items: [

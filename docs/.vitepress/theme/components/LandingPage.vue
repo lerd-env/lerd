@@ -32,13 +32,14 @@ onMounted(async () => {
   for (const key of Object.keys(live)) if (live[key]) counts.value[key] = live[key]
 })
 
-const copied = ref(false)
+// Holds the command last copied, so only its own button flips to COPIED.
+const copied = ref('')
 let copyTimer = null
-async function copyInstall() {
-  try { await navigator.clipboard.writeText(D.INSTALL) } catch (e) { return }
-  copied.value = true
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text) } catch (e) { return }
+  copied.value = text
   clearTimeout(copyTimer)
-  copyTimer = setTimeout(() => { copied.value = false }, 1600)
+  copyTimer = setTimeout(() => { copied.value = '' }, 1600)
 }
 onBeforeUnmount(() => clearTimeout(copyTimer))
 
@@ -144,7 +145,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
         <h1>Lerd <span>{{ t.hero.h1 }}</span></h1>
         <p>{{ t.hero.p }}</p>
         <div class="hero-row">
-          <div class="cmd"><i>$</i><code>{{ D.INSTALL }}</code><button class="copy" type="button" @click="copyInstall">{{ copied ? t.hero.copied : t.hero.copy }}</button></div>
+          <div class="cmd"><i>$</i><code>{{ D.INSTALL }}</code><button class="copy" type="button" @click="copy(D.INSTALL)">{{ copied === D.INSTALL ? t.hero.copied : t.hero.copy }}</button></div>
           <button class="btn primary" type="button" @click="demoOpen = true">{{ t.hero.demo }}</button>
           <a class="btn" :href="D.WINDOWS_INSTALLER"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M0 3.4 9.8 2v9.5H0zm10.9-1.6L24 0v11.4H10.9zM0 12.6h9.8V22L0 20.6zm10.9 0H24V24l-13.1-1.9z"/></svg>Windows</a>
           <a class="btn" :href="withBase('/getting-started/requirements')">{{ t.hero.docs }}</a>
@@ -303,9 +304,32 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
         </div>
       </div></section>
 
+      <section class="sec" id="desktop"><div class="wrap">
+        <div class="sec-head">
+          <div class="label"><b>{{ pad(D.LINEUP.length + 7) }}</b> / {{ t.desktop.label }}</div>
+          <div>
+            <h2>{{ t.desktop.h[0] }} <span>{{ t.desktop.h[1] }}</span></h2>
+            <p class="sec-lead">{{ t.desktop.lead }}</p>
+          </div>
+        </div>
+        <div class="grid6 plat desk">
+          <div v-for="(name, i) in ['macOS', 'Linux', 'Windows']" :key="name" class="p">
+            <div class="card-top"><span class="n">{{ pad(i + 1) }}</span><span class="badge ok">{{ D.DESKTOP.badges[i] }}</span></div>
+            <h3>{{ name }}</h3>
+            <p>{{ t.desktop.items[i] }}</p>
+            <div v-if="i === 0" class="desk-row">
+              <a class="btn" :href="D.DESKTOP.macArm">{{ t.desktop.arm }}</a>
+              <a class="btn" :href="D.DESKTOP.macIntel">{{ t.desktop.intel }}</a>
+            </div>
+            <div v-else-if="i === 1" class="cmd"><i>$</i><code>{{ D.DESKTOP.flatpak }}</code><button class="copy" type="button" @click="copy(D.DESKTOP.flatpak)">{{ copied === D.DESKTOP.flatpak ? t.hero.copied : t.hero.copy }}</button></div>
+            <div v-else class="desk-row"><a class="btn" :href="D.WINDOWS_INSTALLER">{{ t.desktop.windows }}</a></div>
+          </div>
+        </div>
+      </div></section>
+
       <section class="sec" id="principles"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 7) }}</b> / {{ t.principles.label }}</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 8) }}</b> / {{ t.principles.label }}</div>
           <h2>{{ t.principles.h[0] }} <span>{{ t.principles.h[1] }}</span></h2>
         </div>
         <div class="grid6">
@@ -315,7 +339,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="compare"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 8) }}</b> / {{ t.compare.label }}</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 9) }}</b> / {{ t.compare.label }}</div>
           <h2>{{ t.compare.h[0] }} <span>{{ t.compare.h[1] }}</span></h2>
         </div>
         <div class="cmp-wrap">
@@ -334,7 +358,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="pricing"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 9) }}</b> / {{ t.pricing.label }}</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 10) }}</b> / {{ t.pricing.label }}</div>
           <h2>{{ t.pricing.h[0] }} <span>{{ t.pricing.h[1] }}</span></h2>
         </div>
         <div class="grid6 price">
@@ -361,7 +385,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="faq"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 10) }}</b> / {{ t.faq.label }}</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 11) }}</b> / {{ t.faq.label }}</div>
           <h2>{{ t.faq.h[0] }} <span>{{ t.faq.h[1] }}</span></h2>
         </div>
         <div class="faq">
@@ -373,11 +397,11 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
       </div></section>
 
       <section class="cta" id="start"><div class="wrap">
-        <div class="label"><b>{{ pad(D.LINEUP.length + 11) }}</b> / {{ t.start.label }}</div>
+        <div class="label"><b>{{ pad(D.LINEUP.length + 12) }}</b> / {{ t.start.label }}</div>
         <h2>{{ t.start.h }}</h2>
         <p>{{ t.start.p }}</p>
         <div class="hero-row">
-          <div class="cmd"><i>$</i><code>{{ D.INSTALL }}</code><button class="copy" type="button" @click="copyInstall">{{ copied ? t.hero.copied : t.hero.copy }}</button></div>
+          <div class="cmd"><i>$</i><code>{{ D.INSTALL }}</code><button class="copy" type="button" @click="copy(D.INSTALL)">{{ copied === D.INSTALL ? t.hero.copied : t.hero.copy }}</button></div>
           <a class="btn" :href="D.WINDOWS_INSTALLER"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M0 3.4 9.8 2v9.5H0zm10.9-1.6L24 0v11.4H10.9zM0 12.6h9.8V22L0 20.6zm10.9 0H24V24l-13.1-1.9z"/></svg>Windows</a>
           <a class="btn" :href="GITHUB" target="_blank" rel="noopener">{{ t.start.star }}<span v-if="stars" class="stars">{{ starLabel(stars) }}</span></a>
         </div>

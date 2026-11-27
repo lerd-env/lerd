@@ -93,6 +93,16 @@ export default {
       'Lerd berjalan di dalam WSL2 dengan CLI, dasbor, layanan, dan server MCP yang sama. Installer Windows menyiapkan semuanya, dan panduan WSL2 menjelaskan setiap langkah.',
     ],
   },
+  desktop: {
+    label: "Aplikasi desktop", h: ["Lerd,", "sebagai aplikasi desktop."],
+    lead: "Aplikasi pendamping opsional yang membuka dasbor di jendelanya sendiri dan menampilkan notifikasi Lerd secara native. Lerd tetap bekerja sama tanpanya.",
+    arm: "Apple silicon", intel: "Intel", windows: "Installer Windows",
+    items: [
+      "Ditandatangani dan dinotarisasi oleh Apple, jadi terbuka tanpa peringatan, dan memperbarui dirinya sendiri. Installer juga menawarkannya.",
+      "Flatpak dari repositori Lerd sendiri, tetap terbaru lewat flatpak update atau pusat perangkat lunak Anda.",
+      "Sudah termasuk dalam installer Windows, tidak ada yang perlu diunduh lagi.",
+    ],
+  },
   principles: {
     label: 'Prinsip', h: ['Bagaimana Lerd', 'dibangun.'],
     items: [
