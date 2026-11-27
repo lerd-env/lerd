@@ -196,6 +196,8 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 	if requiresUnit != "" {
 		fpmOrder += fmt.Sprintf("After=%s.service\nWants=%s.service\n", requiresUnit, requiresUnit)
 	}
+	// A dev server stopped while npm is still starting it can miss the SIGTERM,
+	// and systemd's 90s default would then hold every stop, sleep and restart.
 	unit := fmt.Sprintf(`[Unit]
 Description=Lerd %s (%s)
 %s
@@ -206,6 +208,7 @@ RestartSec=5
 WorkingDirectory=%s
 Environment=PATH=%s
 %sSuccessExitStatus=1 130 143
+TimeoutStopSec=10
 %sExecStart=/bin/sh -c '%s'
 
 [Install]

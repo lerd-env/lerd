@@ -1487,6 +1487,8 @@ compiler skips Rails. The lane needs at least one guest with all four.
 - [ ] `lerd restart` and a re-link keep the moved port
 - [ ] The committed `.lerd.yaml` is never rewritten by a move
 - [ ] The declared port comes back on a restart once it is free
+- [ ] A dev server stopped a second after it starts stops within seconds, not
+      systemd's default 90
 - [ ] A sleeping site whose port was taken meanwhile wakes on another
 - [ ] `lerd start` moves a site whose port is taken
 - [ ] A port edited in `.lerd.yaml` reaches nginx and the server on `lerd link`
