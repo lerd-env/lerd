@@ -254,8 +254,13 @@ s.sendall(b"GET /api/ws HTTP/1.1\r\nHost: 127.0.0.1:7073\r\nUpgrade: websocket\r
           b"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n")
 buf = b""
 while b"\r\n\r\n" not in buf:
-    buf += s.recv(4096)
-buf = buf.split(b"\r\n\r\n", 1)[1]
+    chunk = s.recv(4096)
+    if not chunk:
+        sys.exit("lerd-ui closed the socket during the upgrade")
+    buf += chunk
+head, buf = buf.split(b"\r\n\r\n", 1)
+if not head.startswith(b"HTTP/1.1 101"):
+    sys.exit("upgrade refused: " + head.split(b"\r\n")[0].decode())
 end, frames = time.time() + float(sys.argv[1]), 0
 def need(n):
     global buf
@@ -275,9 +280,18 @@ try:
             need(10); n, off = int.from_bytes(buf[2:10], "big"), 10
         need(off + n)
         buf, frames = buf[off + n:], frames + 1
-except (socket.timeout, EOFError):
+except socket.timeout:
     pass
+except EOFError:
+    sys.exit(f"lerd-ui closed the socket after {frames} frames")
 print(frames)
 PY
 }
-check "10.94 an idle open dashboard is not rebuilt every second" test "$(dashboard_frames 20)" -le 5
+# The snapshot sent on connect proves the socket works; past five, it is looping.
+idle_dashboard_quiet() {
+	local n
+	n=$(dashboard_frames 20) || return 1
+	echo "$n frames in 20s"
+	[ "$n" -ge 1 ] && [ "$n" -le 5 ]
+}
+check "10.94 an idle open dashboard is not rebuilt every second" idle_dashboard_quiet
