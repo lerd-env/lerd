@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Proje klasörünü de diskten sil",
   "sites_unlinkDeleteOutsideWorktree": "{path} worktree'si kalır, ancak git verileri projeyle birlikte silinir.",
   "sites_unlinkDeleteType": "Onaylamak için {name} yazın",
+  "sites_unlinkDeleteUnchecked": "Git {path} konumunu okuyamadı, bu yüzden oradaki çalışmalar bu listede eksik olabilir.",
   "sites_unlinkDeleteUncommitted": "{path} içinde commit edilmemiş değişiklikler var.",
   "sites_unlinkDeleteUnpushed": "{count} commit hiçbir remote'ta yok.",
   "sites_unlinkDeleteWorktree": "{path} worktree'si de onunla birlikte silinir.",

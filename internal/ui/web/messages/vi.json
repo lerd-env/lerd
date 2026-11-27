@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Xóa luôn thư mục dự án khỏi ổ đĩa",
   "sites_unlinkDeleteOutsideWorktree": "Worktree {path} vẫn còn, nhưng dữ liệu git của nó bị xóa cùng dự án.",
   "sites_unlinkDeleteType": "Nhập {name} để xác nhận",
+  "sites_unlinkDeleteUnchecked": "Git không đọc được {path}, nên công việc ở đó có thể không có trong danh sách này.",
   "sites_unlinkDeleteUncommitted": "{path} có thay đổi chưa commit.",
   "sites_unlinkDeleteUnpushed": "{count} commit không có trên remote nào.",
   "sites_unlinkDeleteWorktree": "Worktree {path} bị xóa cùng.",

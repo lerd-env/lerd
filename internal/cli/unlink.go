@@ -104,9 +104,17 @@ func UnlinkSiteWith(name string, opts UnlinkOptions) error {
 	if err != nil {
 		return fmt.Errorf("site %q not found", name)
 	}
+	// The registry stops listing the site once it is unlinked, so the paths that
+	// tell the delete which projects lerd mounts are read before that.
+	var sitePaths []string
 	if opts.DeleteDir {
 		if err := confirmDeleteSiteDir(site, opts.Confirmed); err != nil {
 			return err
+		}
+		if reg, err := config.LoadSites(); err == nil {
+			for _, s := range reg.Sites {
+				sitePaths = append(sitePaths, s.Path)
+			}
 		}
 	}
 
@@ -151,7 +159,7 @@ func UnlinkSiteWith(name string, opts UnlinkOptions) error {
 
 	if opts.DeleteDir {
 		step := feedback.Start("deleting " + site.Path)
-		if err := siteops.RemoveSiteDir(site.Name, site.Path, parkedDirs); err != nil {
+		if err := siteops.RemoveSiteDir(site.Name, site.Path, parkedDirs, sitePaths); err != nil {
 			step.Fail(err)
 			return fmt.Errorf("%s is unlinked, but its directory was not deleted: %w", name, err)
 		}
@@ -182,6 +190,9 @@ func confirmDeleteSiteDir(site *config.Site, confirmed bool) error {
 	}
 	if r.Unpushed > 0 {
 		feedback.Warn("%d commits are on no remote", r.Unpushed)
+	}
+	for _, dir := range r.Unchecked {
+		feedback.Warn("git could not read %s, so work there may be missing from this list", dir)
 	}
 	if !isInteractive() {
 		return fmt.Errorf("not deleting %s without a terminal to confirm, pass --yes", r.Path)

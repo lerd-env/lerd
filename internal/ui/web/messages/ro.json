@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Șterge și folderul proiectului de pe disc",
   "sites_unlinkDeleteOutsideWorktree": "Worktree-ul {path} rămâne, dar datele git sunt șterse împreună cu proiectul.",
   "sites_unlinkDeleteType": "Tastează {name} pentru a confirma",
+  "sites_unlinkDeleteUnchecked": "Git nu a putut citi {path}, așa că munca de acolo poate lipsi din această listă.",
   "sites_unlinkDeleteUncommitted": "{path} are modificări necomise.",
   "sites_unlinkDeleteUnpushed": "{count} commituri nu sunt pe niciun remote.",
   "sites_unlinkDeleteWorktree": "Worktree-ul {path} este șters odată cu el.",

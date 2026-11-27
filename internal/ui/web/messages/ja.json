@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "プロジェクトフォルダもディスクから削除する",
   "sites_unlinkDeleteOutsideWorktree": "ワークツリー {path} は残りますが、その git データはプロジェクトと一緒に削除されます。",
   "sites_unlinkDeleteType": "確認のため {name} と入力してください",
+  "sites_unlinkDeleteUnchecked": "Git が {path} を読み取れなかったため、そこでの作業がこの一覧に含まれていない可能性があります。",
   "sites_unlinkDeleteUncommitted": "{path} にコミットされていない変更があります。",
   "sites_unlinkDeleteUnpushed": "{count} 件のコミットがどのリモートにもありません。",
   "sites_unlinkDeleteWorktree": "ワークツリー {path} も一緒に削除されます。",

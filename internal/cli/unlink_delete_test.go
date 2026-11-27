@@ -32,11 +32,10 @@ func isolatedHome(t *testing.T) string {
 func TestUnlinkDeleteFilesRefusesBeforeUnlinking(t *testing.T) {
 	home := isolatedHome(t)
 
-	outside := filepath.Join(t.TempDir(), "shop")
-	siteToDelete(t, outside)
+	siteToDelete(t, home)
 	err := UnlinkSiteWith("shop", UnlinkOptions{DeleteDir: true, Confirmed: true})
-	if err == nil || !strings.Contains(err.Error(), "outside the folders lerd mounts") {
-		t.Errorf("a directory outside every mount must be refused, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "not deleting the directory") {
+		t.Errorf("the home directory must be refused, got %v", err)
 	}
 	if _, err := config.FindSite("shop"); err != nil {
 		t.Errorf("a refused delete must leave the site linked: %v", err)

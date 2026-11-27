@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "同时从磁盘删除项目文件夹",
   "sites_unlinkDeleteOutsideWorktree": "工作树 {path} 会保留，但其 git 数据会随项目一起删除。",
   "sites_unlinkDeleteType": "输入 {name} 以确认",
+  "sites_unlinkDeleteUnchecked": "Git 无法读取 {path}，因此该处的工作可能未列在此列表中。",
   "sites_unlinkDeleteUncommitted": "{path} 有未提交的更改。",
   "sites_unlinkDeleteUnpushed": "有 {count} 个提交不在任何远程仓库上。",
   "sites_unlinkDeleteWorktree": "工作树 {path} 会一并删除。",

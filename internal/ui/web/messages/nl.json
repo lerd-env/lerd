@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Ook de projectmap van de schijf verwijderen",
   "sites_unlinkDeleteOutsideWorktree": "De worktree {path} blijft, maar de git-gegevens worden met het project verwijderd.",
   "sites_unlinkDeleteType": "Typ {name} om te bevestigen",
+  "sites_unlinkDeleteUnchecked": "Git kon {path} niet lezen, dus werk daar ontbreekt mogelijk in deze lijst.",
   "sites_unlinkDeleteUncommitted": "{path} heeft niet-gecommitte wijzigingen.",
   "sites_unlinkDeleteUnpushed": "{count} commits staan op geen enkele remote.",
   "sites_unlinkDeleteWorktree": "De worktree {path} wordt mee verwijderd.",

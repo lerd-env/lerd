@@ -11,8 +11,17 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestCheckSiteDirDeletable(t *testing.T) {
-	root := t.TempDir()
+	root := resolvedTempDir(t)
 	project := filepath.Join(root, "Lerd", "shop")
 	link := filepath.Join(root, "Lerd", "linked")
 	if err := os.MkdirAll(project, 0o755); err != nil {
@@ -25,8 +34,8 @@ func TestCheckSiteDirDeletable(t *testing.T) {
 	roots := []string{root, filepath.Join(root, "Lerd")}
 	protected := []string{data}
 
-	if err := checkSiteDirDeletable(project, roots, protected); err != nil {
-		t.Errorf("a project inside a root must be deletable: %v", err)
+	if target, err := checkSiteDirDeletable(project, roots, nil, protected); err != nil || target != project {
+		t.Errorf("a project inside a root must be deletable as itself, got %q %v", target, err)
 	}
 	for name, path := range map[string]string{
 		"a root itself":                root,
@@ -38,9 +47,44 @@ func TestCheckSiteDirDeletable(t *testing.T) {
 		"a missing folder":             filepath.Join(root, "Lerd", "gone"),
 		"a relative path":              "Lerd/shop",
 	} {
-		if err := checkSiteDirDeletable(path, roots, protected); err == nil {
+		if _, err := checkSiteDirDeletable(path, roots, nil, protected); err == nil {
 			t.Errorf("%s (%s) must be refused", name, path)
 		}
+	}
+}
+
+// A folder above the project swapped for a symlink sends the stored path
+// somewhere else, and only where it really leads may decide.
+func TestCheckSiteDirRefusesAPathLeadingOutThroughASymlink(t *testing.T) {
+	root, outside := resolvedTempDir(t), resolvedTempDir(t)
+	project := filepath.Join(root, "Code", "shop")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, "Code"), filepath.Join(outside, "Code")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "Code"), filepath.Join(root, "Code")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkSiteDirDeletable(project, []string{root}, nil, nil); err == nil {
+		t.Error("a path that resolves outside every root must be refused")
+	}
+}
+
+// lerd mounts a linked project outside home by its own path, so that project is
+// deletable even with no root above it, though never a root itself.
+func TestCheckSiteDirAcceptsAMountedProjectOutsideTheRoots(t *testing.T) {
+	root, elsewhere := resolvedTempDir(t), resolvedTempDir(t)
+	project := filepath.Join(elsewhere, "shop")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkSiteDirDeletable(project, []string{root}, []string{project}, nil); err != nil {
+		t.Errorf("a registered project lerd mounts must be deletable: %v", err)
+	}
+	if _, err := checkSiteDirDeletable(root, []string{root}, []string{root}, nil); err == nil {
+		t.Error("a root registered as a project must still be refused")
 	}
 }
 
@@ -56,10 +100,7 @@ func gitIn(t *testing.T, dir string, args ...string) {
 // A repo with one commit no remote has, a worktree inside it and one beside it.
 func repoWithWorktrees(t *testing.T) (project, inside, outside string) {
 	t.Helper()
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := resolvedTempDir(t)
 	project = filepath.Join(root, "shop")
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
@@ -127,7 +168,7 @@ func TestRemoveSiteDirDropsTheRegistryEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := RemoveSiteDir("shop", project, []string{parked}); err != nil {
+	if err := RemoveSiteDir("shop", project, []string{parked}, nil); err != nil {
 		t.Fatalf("RemoveSiteDir: %v", err)
 	}
 	if _, err := os.Stat(project); !os.IsNotExist(err) {
@@ -135,5 +176,33 @@ func TestRemoveSiteDirDropsTheRegistryEntry(t *testing.T) {
 	}
 	if _, err := config.FindSite("shop"); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("the ignored entry must be dropped, FindSite err = %v", err)
+	}
+}
+
+// A commit made on a detached checkout belongs to no branch, and goes with the
+// folder all the same.
+func TestReportSiteDirCountsCommitsOnADetachedCheckout(t *testing.T) {
+	project, _, _ := repoWithWorktrees(t)
+	remote := resolvedTempDir(t)
+	gitIn(t, remote, "init", "-q", "--bare")
+	gitIn(t, project, "remote", "add", "origin", remote)
+	gitIn(t, project, "push", "-q", "origin", "main", "feat", "fix")
+	gitIn(t, project, "checkout", "-q", "--detach")
+	gitIn(t, project, "commit", "-q", "--allow-empty", "-m", "detached")
+
+	if r := ReportSiteDir(project, "shop.test"); r.Unpushed != 1 {
+		t.Errorf("unpushed = %d, want the commit only the detached HEAD reaches", r.Unpushed)
+	}
+}
+
+// A git check that fails must say so, or a clean report could hide lost work.
+func TestReportSiteDirNamesTheChecksThatFailed(t *testing.T) {
+	project, _, _ := repoWithWorktrees(t)
+	if err := os.WriteFile(filepath.Join(project, ".git", "index"), []byte("not an index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := ReportSiteDir(project, "shop.test")
+	if !slices.Contains(r.Unchecked, project) {
+		t.Errorf("unchecked = %v, want the project whose status could not be read", r.Unchecked)
 	}
 }

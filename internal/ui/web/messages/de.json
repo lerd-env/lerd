@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Auch den Projektordner von der Festplatte löschen",
   "sites_unlinkDeleteOutsideWorktree": "Der Worktree {path} bleibt, aber seine Git-Daten werden mit dem Projekt gelöscht.",
   "sites_unlinkDeleteType": "Zur Bestätigung {name} eingeben",
+  "sites_unlinkDeleteUnchecked": "Git konnte {path} nicht lesen, daher fehlt dort möglicherweise Arbeit in dieser Liste.",
   "sites_unlinkDeleteUncommitted": "{path} hat nicht committete Änderungen.",
   "sites_unlinkDeleteUnpushed": "{count} Commits sind auf keinem Remote.",
   "sites_unlinkDeleteWorktree": "Der Worktree {path} wird mit gelöscht.",

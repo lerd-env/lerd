@@ -88,6 +88,9 @@
             {#if report.unpushed}
               <p class="text-amber-600 dark:text-amber-400">{m.sites_unlinkDeleteUnpushed({ count: report.unpushed })}</p>
             {/if}
+            {#each report.unchecked ?? [] as dir (dir)}
+              <p class="text-amber-600 dark:text-amber-400">{m.sites_unlinkDeleteUnchecked({ path: dir })}</p>
+            {/each}
             <label class="block pt-1 space-y-1 text-gray-700 dark:text-gray-300">
               <span>{m.sites_unlinkDeleteType({ name: siteName })}</span>
               <input

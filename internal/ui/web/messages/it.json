@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Elimina anche la cartella del progetto dal disco",
   "sites_unlinkDeleteOutsideWorktree": "Il worktree {path} resta, ma i suoi dati git vengono eliminati con il progetto.",
   "sites_unlinkDeleteType": "Digita {name} per confermare",
+  "sites_unlinkDeleteUnchecked": "Git non è riuscito a leggere {path}, quindi del lavoro lì potrebbe mancare da questo elenco.",
   "sites_unlinkDeleteUncommitted": "{path} ha modifiche non committate.",
   "sites_unlinkDeleteUnpushed": "{count} commit non sono su nessun remoto.",
   "sites_unlinkDeleteWorktree": "Il worktree {path} viene eliminato con esso.",

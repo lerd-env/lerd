@@ -91,13 +91,15 @@ describe('ConfirmSiteUnlinkModal', () => {
       path: '/home/me/Lerd/acme',
       inside_worktrees: ['/home/me/Lerd/acme/acme-feat'],
       uncommitted: ['/home/me/Lerd/acme'],
-      unpushed: 2
+      unpushed: 2,
+      unchecked: ['/home/me/Lerd/acme-fix']
     });
     const { getByLabelText, getByText, getByRole } = render(ConfirmSiteUnlinkModal);
     await fireEvent.click(getByLabelText(/delete the project folder/));
     await vi.waitFor(() => expect(getByText(/acme-feat is deleted with it/)).toBeTruthy());
     expect(getByText(/has uncommitted changes/)).toBeTruthy();
     expect(getByText(/2 commits are not on any remote/)).toBeTruthy();
+    expect(getByText(/could not read \/home\/me\/Lerd\/acme-fix/)).toBeTruthy();
 
     const button = getByRole('button', { name: 'Unlink and delete' });
     expect(button).toBeDisabled();

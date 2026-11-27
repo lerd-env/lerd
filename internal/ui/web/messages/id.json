@@ -1151,6 +1151,7 @@
   "sites_unlinkDeleteDir": "Hapus juga folder proyek dari disk",
   "sites_unlinkDeleteOutsideWorktree": "Worktree {path} tetap ada, tetapi data git-nya ikut terhapus bersama proyek.",
   "sites_unlinkDeleteType": "Ketik {name} untuk mengonfirmasi",
+  "sites_unlinkDeleteUnchecked": "Git tidak dapat membaca {path}, jadi pekerjaan di sana mungkin tidak ada di daftar ini.",
   "sites_unlinkDeleteUncommitted": "{path} memiliki perubahan yang belum di-commit.",
   "sites_unlinkDeleteUnpushed": "{count} commit tidak ada di remote mana pun.",
   "sites_unlinkDeleteWorktree": "Worktree {path} ikut terhapus.",

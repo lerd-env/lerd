@@ -680,6 +680,7 @@ export interface SiteDirReport {
   outside_worktrees?: string[];
   uncommitted?: string[];
   unpushed?: number;
+  unchecked?: string[];
   refused?: string;
 }
 export const previewSiteDirDelete = (d: string) => apiJson<SiteDirReport>(site(d, 'unlink:preview'));
