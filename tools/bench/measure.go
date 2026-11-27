@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // calibrate returns sha256 throughput in MB/s on one core and on all cores, so
@@ -218,16 +220,16 @@ func parsePSTime(s string) (time.Duration, error) {
 }
 
 func containerUsage() (map[string]usage, error) {
-	out, err := exec.Command("podman", "stats", "--no-stream", "--format", "json").Output()
+	out, err := podman.Run("stats", "--no-stream", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("podman stats: %w", err)
+		return nil, err
 	}
 	var rows []struct {
 		Name    string `json:"name"`
 		CPUTime string `json:"cpu_time"`
 		Mem     string `json:"mem_usage"`
 	}
-	if err := json.Unmarshal(out, &rows); err != nil {
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
 		return nil, fmt.Errorf("podman stats: %w", err)
 	}
 	res := map[string]usage{}

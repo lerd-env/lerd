@@ -207,6 +207,7 @@ export const SIDEBAR = {
         { text: 'Building from Source', link: '/contributing/building' },
         { text: 'Pull Requests', link: '/contributing/pull-requests' },
         { text: 'Extending the Plugin System', link: '/contributing/plugins' },
+        { text: 'Measuring Performance', link: '/contributing/benchmark' },
       ],
     },
   ],

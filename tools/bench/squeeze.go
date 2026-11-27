@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // A page a developer waits on: p95 under four parallel requests (a page and
@@ -210,7 +212,7 @@ func servingContainers(site string) ([]string, error) {
 // podman update --cpus cannot lift a limit again (0 is ignored), so the bench
 // writes cgroup v2 directly and puts back the exact original line.
 func cgroupCPUMax(ctr string) (string, error) {
-	pid, err := runCmd("podman", "inspect", ctr, "--format", "{{.State.Pid}}")
+	pid, err := podman.Run("inspect", ctr, "--format", "{{.State.Pid}}")
 	if err != nil {
 		return "", err
 	}
