@@ -32,13 +32,17 @@ func ReportSiteDir(path, domain string) SiteDirReport {
 	if _, err := CheckSiteDir(path, nil, registeredSitePaths()); err != nil {
 		r.Refused = err.Error()
 	}
-	if _, err := git.Output(path, "rev-parse", "--git-dir"); err != nil {
-		return r // not a repository, so there is no git work to lose
-	}
 	unchecked := func(dir string) {
 		if !slices.Contains(r.Unchecked, dir) {
 			r.Unchecked = append(r.Unchecked, dir)
 		}
+	}
+	if _, err := git.Output(path, "rev-parse", "--git-dir"); err != nil {
+		// A .git git cannot open is a damaged repository, not a plain folder.
+		if _, statErr := os.Lstat(filepath.Join(path, ".git")); statErr == nil {
+			unchecked(path)
+		}
+		return r
 	}
 	checkouts := []string{path}
 	if git.IsMainRepo(path) {
@@ -155,8 +159,8 @@ func checkSiteDirDeletable(path string, roots, projects, protected []string) (st
 	inside := false
 	for _, root := range roots {
 		root = resolved(root)
-		if target == root {
-			return "", fmt.Errorf("%s is a folder lerd mounts, not a project", path)
+		if within(root, target) {
+			return "", fmt.Errorf("%s is or holds a folder lerd mounts, not a project", path)
 		}
 		inside = inside || within(target, root)
 	}

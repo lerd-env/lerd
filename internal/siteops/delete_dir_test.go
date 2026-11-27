@@ -206,3 +206,29 @@ func TestReportSiteDirNamesTheChecksThatFailed(t *testing.T) {
 		t.Errorf("unchecked = %v, want the project whose status could not be read", r.Unchecked)
 	}
 }
+
+// A project holding a parked directory or a mount would take every project
+// inside that folder with it, so it is refused like the folder itself.
+func TestCheckSiteDirRefusesAFolderHoldingAMountRoot(t *testing.T) {
+	root := resolvedTempDir(t)
+	project := filepath.Join(root, "Code", "app")
+	parked := filepath.Join(project, "projects")
+	if err := os.MkdirAll(parked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkSiteDirDeletable(project, []string{root, parked}, nil, nil); err == nil {
+		t.Error("a project holding a parked directory must be refused")
+	}
+}
+
+// A repository too damaged for git to recognise still holds work, so it is
+// reported as unread rather than passed off as a plain folder.
+func TestReportSiteDirNamesARepositoryGitCannotOpen(t *testing.T) {
+	project, _, _ := repoWithWorktrees(t)
+	if err := os.WriteFile(filepath.Join(project, ".git", "HEAD"), []byte("garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := ReportSiteDir(project, "shop.test"); !slices.Contains(r.Unchecked, project) {
+		t.Errorf("unchecked = %v, want the repository git could not open", r.Unchecked)
+	}
+}
