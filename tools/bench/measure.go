@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -312,7 +311,6 @@ func linkFixture() (string, func(), error) {
 
 func newClient() *http.Client {
 	return &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, // local fixture only
 		MaxIdleConnsPerHost: 16,
 	}}
 }
