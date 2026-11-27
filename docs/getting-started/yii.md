@@ -23,7 +23,7 @@ Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Cursor, Ju
 
 ```bash [lerd new]
 cd ~/Lerd
-lerd new yiiapp --framework=yii
+lerd new yiiapp --framework=yii --framework-version=2
 ```
 
 ```bash [existing repo]
@@ -56,7 +56,7 @@ lerd link
   Framework   yii
 ```
 
-Yii is detected from `yiisoft/yii2` in `composer.json` rather than from the `yii` console script, which Yii 3 ships too. The document root is `web/`, and the definition supports PHP 7.4 to 8.4.
+Yii 2 is told apart from Yii 3 by `yiisoft/yii2` in `composer.lock`, since both ship the `yii` console script. The document root is `web/`, and the definition supports PHP 7.4 to 8.4.
 
 ---
 
@@ -114,6 +114,29 @@ The queue worker runs `php yii queue/listen --verbose` and appears once the proj
 |---|---|---|
 | `cache:flush` | `php yii cache/flush-all` | Clear all application caches |
 | `migrate` | `php yii migrate --interactive=0` | Apply outstanding migrations |
+
+---
+
+## Tinker
+
+The Tinker tab builds the console application the way the `yii` script does, so `Yii::$app->db->dsn` or a model query runs against the real configuration. See [Tinker](../features/tinker.md).
+
+---
+
+## Yii 3
+
+Yii 3 is the definition `lerd new --framework=yii` picks by default. It ships no framework package, so an app with the `yii` console script and no `yiisoft/yii2` is read as Yii 3, whatever version its runner packages carry.
+
+```bash
+cd ~/Lerd
+lerd new yii3app --framework=yii
+```
+
+That runs `composer create-project yiisoft/app`, serves `public/` and creates `.env` from `.env.example` on `lerd env`. The template keeps no database, so `lerd env` wires none. `lerd console` maps to `php yii`, and the Tinker tab builds the DI container first, with `$container` in scope:
+
+```php
+$container->get(\Psr\Log\LoggerInterface::class)
+```
 
 ---
 

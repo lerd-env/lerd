@@ -11,7 +11,7 @@ Useful for the things you'd otherwise do in `php artisan tinker` or a `bin/conso
 The Run button POSTs your code to `lerd-ui`, which executes it inside the site's PHP container and returns the captured output. The execution mode is driven by the framework definition's `tinker:` block (see [framework definitions](#framework-defined-repl) below):
 
 - **Framework-defined REPL**: when the active framework declares a `tinker:` block in its YAML and the declared `requires_package` / `requires_file` checks pass, lerd runs the framework's REPL. For Laravel that's `php artisan tinker --execute=...`, so the app is bootstrapped: `User::count()`, `Route::getRoutes()`, `Cache::get('foo')` all just work. The `mode` field in the response is set to the framework name (e.g. `"laravel"`).
-- **Plain `php` fallback**: any site without a satisfied framework REPL (Symfony, vanilla PHP, Laravel without `laravel/tinker` installed). The code is written to a temp script inside the site, with `vendor/autoload.php` auto-required if it exists, and executed via `php {file}`. `mode` is `"php"`.
+- **Plain `php` fallback**: any site without a satisfied framework REPL (vanilla PHP, Laravel without `laravel/tinker` installed, WordPress without wp-cli). The code is written to a temp script inside the site, with `vendor/autoload.php` auto-required if it exists, and executed via `php {file}`. `mode` is `"php"`.
 
 The active mode is shown as a small badge in the toolbar.
 
@@ -34,22 +34,30 @@ Resolution rules:
 2. If `requires_package` is set and `vendor/<package>` is missing, the framework's REPL is skipped.
 3. Otherwise, lerd runs `podman exec ... php <Command…>` and either appends `<execute_flag>=<code>` or pipes the code via stdin.
 
-To add Tinker support for another framework, ship a `tinker:` block in its YAML, no Go changes needed. Examples:
+To add Tinker support for another framework, ship a `tinker:` block in its YAML, no Go changes needed. What the store's frameworks run today:
+
+| Framework | Runs | In scope |
+|---|---|---|
+| Laravel, Lumen, Statamic, Winter, October | `artisan tinker --execute` | the booted app, facades, models |
+| WordPress, Bedrock | `wp eval` | WordPress loaded, `get_bloginfo()`, `WP_Query` |
+| Drupal | `drush php:eval` | the bootstrapped site, `\Drupal::service()` |
+| Symfony, Sulu | `php -r` with the autoloader | project and vendor classes |
+| Tempest | `php -r` after `Tempest::boot()` | the container, through `Tempest\Container\get()` |
+| Yii 2 | `php -r` after building the console app | `Yii::$app` |
+| Yii 3 | `php -r` after building the DI container | `$container` |
+
+A framework that ships no REPL of its own boots itself in a `php -r` script that then evaluates the code tinker pipes in on stdin. This is the Yii 2 block, trimmed:
 
 ```yaml
-# A hypothetical Symfony with psysh installed
 tinker:
-  command: ["vendor/bin/psysh"]
-  requires_package: psy/psysh
+  command:
+    - "-r"
+    - "require 'vendor/autoload.php'; require 'vendor/yiisoft/yii2/Yii.php'; new yii\\console\\Application(require 'config/console.php'); eval(stream_get_contents(STDIN));"
+  requires_package: yiisoft/yii2
+  requires_file: config/console.php
 ```
 
-```yaml
-# A Drupal-with-drush setup
-tinker:
-  command: ["vendor/bin/drush", "php-eval"]
-  execute_flag: ""    # piped via stdin
-  requires_file: drush.php
-```
+A framework that installs its own error handler, as Tempest and WordPress do, should hand fatals back to PHP in that script, or a run that fails comes back blank.
 
 ## Snippets
 
