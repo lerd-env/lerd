@@ -295,3 +295,34 @@ idle_dashboard_quiet() {
 	[ "$n" -ge 1 ] && [ "$n" -le 5 ]
 }
 check "10.94 an idle open dashboard is not rebuilt every second" idle_dashboard_quiet
+
+# service_status_within <service> <status> <seconds>: waits for /api/services to
+# report the status, printing how long it took.
+service_status_within() {
+	local t=0
+	while [ "$t" -lt "$3" ]; do
+		curl -s http://127.0.0.1:7073/api/services | python3 -c "import json,sys; sys.exit(0 if any(s['name']=='$1' and s['status']=='$2' for s in json.load(sys.stdin)) else 1)" && { echo "$1 $2 after ${t}s"; return 0; }
+		sleep 1
+		t=$((t + 1))
+	done
+	echo "$1 still not $2 after $3s"
+	return 1
+}
+# A container stopped or started behind lerd's back reaches the API from
+# podman's event stream, not the minute-long poll it used to wait for.
+external_stop_shows() {
+	local was_up=1 rc
+	if ! service_status_within mailpit active 1 >/dev/null; then
+		was_up=0
+		lerd service start mailpit >/dev/null 2>&1
+		service_status_within mailpit active 60 || return 1
+	fi
+	systemctl --user stop lerd-mailpit
+	service_status_within mailpit inactive 15
+	rc=$?
+	systemctl --user start lerd-mailpit
+	service_status_within mailpit active 15 || rc=1
+	[ "$was_up" = 1 ] || lerd service stop mailpit >/dev/null 2>&1
+	return $rc
+}
+check "10.95 a service stopped and started outside lerd shows within seconds" external_stop_shows
