@@ -428,15 +428,14 @@ func loadStorePackage(name, version string) *FrameworkPackage {
 }
 
 func loadPackageYAML(path string) *FrameworkPackage {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var pkg FrameworkPackage
-	if yaml.Unmarshal(data, &pkg) != nil || pkg.Package == "" {
-		return nil
-	}
-	return &pkg
+	pkg, _ := loadStoreFile(path, func(data []byte) (*FrameworkPackage, bool) {
+		var pkg FrameworkPackage
+		if yaml.Unmarshal(data, &pkg) != nil || pkg.Package == "" {
+			return nil, false
+		}
+		return &pkg, true
+	})
+	return pkg
 }
 
 // SaveStorePackage caches a fetched package definition.
