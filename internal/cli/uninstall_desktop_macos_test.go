@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,7 @@ func fakeMacApps(t *testing.T) (apps, data string, quit *bool) {
 	macDesktopAppDirs = func() []string { return []string{apps} }
 	macDesktopAppData = func() string { return data }
 	quit = new(bool)
-	quitMacDesktopApp = func() { *quit = true }
+	quitMacDesktopApp = func(string) error { *quit = true; return nil }
 	return apps, data, quit
 }
 
@@ -69,6 +70,26 @@ func TestRemoveMacDesktopApp_QuitsAndRemovesKeepingDataUnlessAsked(t *testing.T)
 		}
 		if _, err := os.Stat(data); os.IsNotExist(err) == !deleteData {
 			t.Errorf("deleteData=%v: data folder present=%v", deleteData, err == nil)
+		}
+	}
+}
+
+// Deleting the bundle under an app that would not quit leaves it running from
+// nothing, so a failed quit keeps the app and its data and says so.
+func TestRemoveMacDesktopApp_KeepsEverythingWhenTheAppWillNotQuit(t *testing.T) {
+	apps, data, _ := fakeMacApps(t)
+	quitMacDesktopApp = func(string) error { return errors.New("Lerd is still running") }
+	app := filepath.Join(apps, "Lerd.app")
+	writeBundle(t, app, desktopFlatpakID)
+	if err := os.MkdirAll(data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMacDesktopApp(app, true); err == nil {
+		t.Fatal("removal reported success with the app still running")
+	}
+	for _, p := range []string{app, data} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s removed while the app ran: %v", p, err)
 		}
 	}
 }

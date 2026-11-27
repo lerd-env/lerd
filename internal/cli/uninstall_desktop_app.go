@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // desktopAppInstalled reports a Lerd desktop app this machine can remove: the
@@ -34,8 +35,22 @@ var macDesktopAppData = func() string {
 	return filepath.Join(home, "Library", "Application Support", "Lerd")
 }
 
-var quitMacDesktopApp = func() {
+// quitMacDesktopApp asks a running app to quit and waits for it to go. Asking
+// one that is not running would launch it, AppleScript's tell does that.
+var quitMacDesktopApp = func(app string) error {
+	running := func() bool {
+		return exec.Command("pgrep", "-f", filepath.Join(app, "Contents", "MacOS")+"/").Run() == nil
+	}
+	if !running() {
+		return nil
+	}
 	_ = exec.Command("osascript", "-e", `tell application id "`+desktopFlatpakID+`" to quit`).Run()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if !running() {
+			return nil
+		}
+	}
+	return fmt.Errorf("the Lerd desktop app is still running; quit it and run lerd uninstall again")
 }
 
 // macDesktopApp is the app's bundle, or "" when it is not installed. Only the
@@ -55,7 +70,9 @@ func macDesktopApp() string {
 // removeMacDesktopApp quits the app so it is not left running from a deleted
 // bundle, and takes its data only when lerd's data goes too.
 func removeMacDesktopApp(app string, deleteData bool) error {
-	quitMacDesktopApp()
+	if err := quitMacDesktopApp(app); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(app); err != nil {
 		return fmt.Errorf("removing %s: %w", app, err)
 	}

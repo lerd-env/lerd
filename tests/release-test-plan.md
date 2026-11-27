@@ -1290,6 +1290,10 @@ Run last on each guest, because it is destructive.
 - [ ] `lerd uninstall --force` skips prompts on a second guest
 - [ ] Reinstall on top of the uninstalled machine and **https → 200** again on a
       re-linked existing project, with its data intact
+- [ ] On macOS, by hand: `lerd uninstall` asks to remove the desktop app, quits
+      it and deletes `Lerd.app`; its `~/Library/Application Support/Lerd` goes
+      only with **remove my data**, and an app that will not quit is left in
+      place with a note. No other `Lerd.app`, the launcher included, is touched
 
 ---
 
