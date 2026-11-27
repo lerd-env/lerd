@@ -116,6 +116,7 @@ nav:
   - Contributing:
       - Building from Source: contributing/building.md
       - Extending the Plugin System: contributing/plugins.md
+      - Measuring Performance: contributing/benchmark.md
   - Troubleshooting: troubleshooting.md
   - Changelog: changelog.md
 
