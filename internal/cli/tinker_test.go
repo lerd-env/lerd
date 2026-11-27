@@ -37,17 +37,17 @@ func TestDetectDumpFunction(t *testing.T) {
 	cases := []struct {
 		name string
 		path string
-		mode string
 		want string
 	}{
-		{"laravel framework mode", siteBare, "laravel", "dump"},
-		{"plain php with var-dumper", siteWithVarDumper, "php", "dump"},
-		{"plain php without var-dumper", siteBare, "php", "var_dump"},
+		{"with var-dumper", siteWithVarDumper, "dump"},
+		// WordPress's tinker runs `wp eval`, where dump() is undefined unless
+		// symfony/var-dumper happens to be installed: a bare expression fatals.
+		{"without var-dumper", siteBare, "var_dump"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := detectDumpFunction(tc.path, tc.mode); got != tc.want {
-				t.Errorf("detectDumpFunction(%s, %s) = %q, want %q", tc.path, tc.mode, got, tc.want)
+			if got := detectDumpFunction(tc.path); got != tc.want {
+				t.Errorf("detectDumpFunction(%s) = %q, want %q", tc.path, got, tc.want)
 			}
 		})
 	}

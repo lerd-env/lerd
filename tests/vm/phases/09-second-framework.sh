@@ -93,6 +93,14 @@ check_out "9.12 [partial] lerd drush runs the command" 'Drush' bash -c "cd $drup
 (cd "$wp" && [ -x vendor/bin/wp ] || lerd composer require wp-cli/wp-cli-bundle --no-interaction </dev/null >/dev/null 2>&1)
 check_out "lerd wp runs the command" 'WP-CLI' bash -c "cd $wp && lerd wp --version"
 
+# WordPress has no dump(), and its fatal handler goes quiet once tinker has
+# printed, so both a value and an error used to come back blank.
+(cd "$wp" && { lerd wp core is-installed 2>/dev/null || { lerd db create </dev/null; lerd wp core install --url="$(site_url "$wp")" --title=vm --admin_user=vm --admin_password=vm --admin_email=vm@example.test --skip-email; }; } </dev/null >/dev/null 2>&1)
+tinker() { curl -s -X POST -H 'X-Lerd-CSRF: 1' -H 'Content-Type: application/json' -d "{\"code\":$2}" "$api/sites/$(site_host "$1")/tinker"; }
+check_out "9.18 the dashboard's tinker shows a WordPress bare expression" 'string\(2\) \\"vm\\"' tinker "$wp" '"get_bloginfo(\"name\")"'
+check_out "9.18 and a WordPress fatal's message" 'Call to undefined function vm_nope' tinker "$wp" '"vm_nope()"'
+check_out "9.18 and a Drupal bare expression" '"stdout":"[^"]*\\"1[0-9]\.' tinker "$drup" '"\\Drupal::VERSION"'
+
 # Packages: horizon belongs to Laravel only, messenger to Symfony only. Horizon
 # goes into phase 6's throwaway project, never demo, where it would supersede
 # the queue worker for every phase after this one.

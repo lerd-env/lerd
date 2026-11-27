@@ -909,6 +909,9 @@ cd shop && lerd setup --all --skip-open
 - [ ] `lerd sail` maps a Sail-shaped project onto lerd's own containers
 - [ ] `lerd wp` on WordPress and `lerd drush` on Drupal run the command rather
       than printing their own wrapper's source and exiting clean
+- [ ] The dashboard's tinker shows a bare expression's value on WordPress and
+      Drupal, and on WordPress a fatal comes back with its message instead of
+      blank
 - [ ] A package that installs a binary globally puts it where the host can run
       it and reports which binaries it moved
 
