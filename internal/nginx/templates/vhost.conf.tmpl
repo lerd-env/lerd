@@ -26,8 +26,13 @@ server {
     }
 
     location ~ {{if .FrontController}}^/index\.php(/|$){{else}}\.php${{end}} {
+        {{- with .NativeUpstream}}
+        fastcgi_pass {{.}};
+        fastcgi_keep_conn on;
+        {{- else}}
         set $fpm "{{.FPMContainer}}";
         fastcgi_pass $fpm:{{.FPMPort}};
+        {{- end}}
         fastcgi_index index.php;
         fastcgi_connect_timeout 5s;
         fastcgi_read_timeout {{.RequestTimeout}}s;

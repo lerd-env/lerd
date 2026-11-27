@@ -62,11 +62,16 @@ func TestGenerateVhost_nativeSiteFastcgisToLoopback(t *testing.T) {
 		t.Fatalf("GenerateVhost: %v", err)
 	}
 	content := readConf(t, filepath.Join(confD, "nativeapp.test.conf"))
-	if !strings.Contains(content, `set $fpm "host.containers.internal"`) {
-		t.Errorf("native vhost should fastcgi to the host gateway, got:\n%s", content)
+	for _, want := range []string{"fastcgi_pass lerd_native_php84;", "fastcgi_keep_conn on;"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("native vhost should reuse its PHP connections (%q), got:\n%s", want, content)
+		}
 	}
-	if !strings.Contains(content, "fastcgi_pass $fpm:9484;") {
-		t.Errorf("native vhost should use the 8.4 host listener port, got:\n%s", content)
+	upstreams := readConf(t, filepath.Join(confD, nativeUpstreamsFile))
+	for _, want := range []string{"upstream lerd_native_php84 {", "server host.containers.internal:9484;", "keepalive 8;", "keepalive_timeout 10s;"} {
+		if !strings.Contains(upstreams, want) {
+			t.Errorf("native upstreams missing %q:\n%s", want, upstreams)
+		}
 	}
 	if strings.Contains(content, "lerd-php84-fpm") {
 		t.Errorf("native vhost must not reference the FPM container:\n%s", content)
@@ -83,5 +88,31 @@ func TestGenerateVhost_containerSiteKeepsPort9000(t *testing.T) {
 	content := readConf(t, filepath.Join(confD, "plainapp.test.conf"))
 	if !strings.Contains(content, "fastcgi_pass $fpm:9000;") {
 		t.Errorf("container vhost must still use 9000, got:\n%s", content)
+	}
+}
+
+// nginx refuses the whole config over one vhost naming an upstream nobody
+// defined, so a version the upstreams file does not list keeps the old form.
+func TestGenerateVhost_nativeSiteOnAnUnlistedVersionKeepsAPlainPass(t *testing.T) {
+	confD := setupConfD(t)
+	nativeMode(t)
+	site := config.Site{Name: "oddapp", Domains: []string{"oddapp.test"}, Path: "/srv/oddapp"}
+	if err := GenerateVhost(site, "9.9"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "oddapp.test.conf"))
+	if strings.Contains(content, "lerd_native_php") || !strings.Contains(content, "fastcgi_pass $fpm:9499;") {
+		t.Errorf("an unlisted version should pass to its port directly, got:\n%s", content)
+	}
+}
+
+// Every version a site can run has its upstream, so the file never has to be
+// rewritten when a site switches PHP version.
+func TestNativeUpstreamsCoverEverySupportedVersion(t *testing.T) {
+	got := renderNativeUpstreams()
+	for _, v := range config.SupportedPHPVersions {
+		if !strings.Contains(got, "upstream "+nativeUpstreamName(v)+" {") {
+			t.Errorf("no upstream for PHP %s:\n%s", v, got)
+		}
 	}
 }

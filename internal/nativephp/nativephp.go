@@ -266,7 +266,10 @@ func FPMConfig(version, errorLog string) (string, error) {
 	// time. The master owns the opcache shared memory, so a pool that has
 	// fallen to zero costs a fork on the next request and nothing more.
 	b.WriteString("pm = ondemand\n")
-	b.WriteString("pm.max_children = 20\n")
+	// nginx keeps up to 8 connections per worker open to this pool, each holding
+	// a child, so this leaves room for 16 workers. ondemand forks only for a
+	// connection that arrives, so a quiet pool still sits at zero.
+	b.WriteString("pm.max_children = 128\n")
 	b.WriteString("pm.process_idle_timeout = 60s\n")
 	b.WriteString("clear_env = no\n")
 	return b.String(), nil
