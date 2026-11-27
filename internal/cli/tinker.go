@@ -109,7 +109,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	home := os.Getenv("HOME")
 	composerHome := composerHomeDir()
 
-	dumpFn := detectDumpFunction(sitePath, mode)
+	dumpFn := detectDumpFunction(sitePath)
 	envArgs := tinkerEnvArgs(sitePath, home, composerHome)
 	// Forward AI agent detection vars so agent-detector (e.g. laravel/pao)
 	// still emits JSON when run inside the container.
@@ -310,16 +310,10 @@ func transformWithSeparator(code, dumpFn string, captureQueries bool) string {
 	return sb.String()
 }
 
-// detectDumpFunction picks which PHP function we should wrap bare
-// expressions in to surface their values. Laravel sites always have
-// `dump()` via the framework. Symfony/plain PHP get `dump()` if Symfony
-// VarDumper is in vendor (any Symfony skeleton has it), else
-// `var_dump()` which is always available. Mode "php" means no
-// framework REPL was selected.
-func detectDumpFunction(sitePath, mode string) string {
-	if mode != "php" {
-		return "dump"
-	}
+// detectDumpFunction picks the function that surfaces a bare expression's
+// value. dump() needs Symfony VarDumper, which a framework REPL alone does
+// not guarantee (wp eval has none), so var_dump() is the fallback.
+func detectDumpFunction(sitePath string) string {
 	if fileExists(filepath.Join(sitePath, "vendor", "symfony", "var-dumper")) {
 		return "dump"
 	}
