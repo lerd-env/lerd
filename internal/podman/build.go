@@ -175,10 +175,10 @@ func mkcertTrustBlock(packages []string) string {
 	return block
 }
 
-// caTrustBlock is the image's trust store step: the mkcert CA, then the roots
-// the host has distrusted.
+// caTrustBlock is the image's trust store step: the mkcert CA, the roots the
+// host added locally, then the roots the host has distrusted.
 func caTrustBlock(tmpDir string, packages []string) string {
-	return mkcertCABlock(tmpDir, packages) + hostDistrustBlock()
+	return mkcertCABlock(tmpDir, packages) + hostAddedCABlock(tmpDir) + hostDistrustBlock()
 }
 
 // hostCAConfPath is where Debian, Ubuntu and Alpine list the CA roots

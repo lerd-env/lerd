@@ -29,6 +29,8 @@ Certificates are stored in `~/.local/share/lerd/certs/sites/`.
 
 The PHP-FPM and FrankenPHP images trust the mkcert CA too, so composer, curl and the app's own requests accept `.test` HTTPS from inside the container. They also follow the roots you have distrusted on the host: every `!` entry in the host's `/etc/ca-certificates.conf` is distrusted in the image as well, so a root pulled after an incident stays out of PHP while Alpine's `ca-certificates` still ships it. The image picks up a change on its next build, so run `lerd php:rebuild` after distrusting a root. A host without that file, such as macOS, carries nothing over.
 
+Roots you have added on the host, such as a company CA behind an internal Git server or a TLS inspecting proxy, can follow them in too. This is off by default: turn it on with `lerd php:trust-host-ca on`, then run `lerd php:rebuild`. Every certificate in the host's local anchor folders is then trusted in the image: `/usr/local/share/ca-certificates` (only `*.crt`, as `update-ca-certificates` reads it) on Debian and Ubuntu, `/etc/pki/ca-trust/source/anchors` on Fedora and RHEL, `/etc/ca-certificates/trust-source/anchors` on Arch, and `/etc/pki/trust/anchors` on openSUSE. Rebuild again after adding a root. macOS keychain roots are not carried over.
+
 ---
 
 ## Browser trust (certutil / nss-tools)

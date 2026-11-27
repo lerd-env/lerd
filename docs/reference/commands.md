@@ -179,6 +179,7 @@ Supported PHP versions: **8.6**, **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, an
 | `lerd php:odbc add <name> <path-to-driver.so> [--description TEXT]` | Register a vendor ODBC driver under the name a DSN's `Driver={...}` asks for; lerd writes the odbcinst registry every PHP container mounts and reports what the image makes of the driver |
 | `lerd php:odbc remove <name>` | Unregister an ODBC driver |
 | `lerd php:odbc list` | List the registered ODBC drivers and whether each one loads in the current version's image |
+| `lerd php:trust-host-ca <on\|off>` | Opt in to trusting the root CAs this machine added (a company CA) inside every PHP image; off by default, applied on the next `lerd php:rebuild` |
 | `lerd php:ports add <host:container...> [--php VERSION]` | Publish extra host ports on the version's shell (FPM) container so a process in `lerd shell` is reachable at `localhost:PORT`; a bare number publishes straight through, and a busy host port shifts to the next free one |
 | `lerd php:ports remove <host...> [--php VERSION]` | Unpublish host ports from the version's shell container |
 | `lerd php:ports list [--php VERSION]` | List the extra host ports published for a PHP version |
