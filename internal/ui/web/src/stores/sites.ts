@@ -281,23 +281,21 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
 // request-serving process idle-suspend stops; sleeping workers leave PHP serving.
 const hostProxyWorker = 'app';
 
-export type SiteIssue = 'build_failed' | 'dev_server_down' | 'container_down' | 'php_down';
-
-// siteIssue says why lerd cannot serve a site it should, or null. Paused sites,
-// sleeping host-proxy servers, static sites and a user-run dev server are fine.
-export function siteIssue(s: Site): SiteIssue | null {
-  if (s.paused) return null;
-  if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return null;
-  if (s.container_build_failed) return 'build_failed';
-  if (s.fpm_running) return null;
-  if (s.host_proxy) return s.host_has_dev_server ? 'dev_server_down' : null;
-  if (s.custom_container) return 'container_down';
-  return s.uses_php ? 'php_down' : null;
+// siteBroken flags sites lerd should serve but cannot, excluding paused sites
+// and sleeping host-proxy servers. nginx serves static sites itself; host-proxy
+// servers belong to the user unless lerd runs them.
+export function siteBroken(s: Site): boolean {
+  if (s.paused) return false;
+  if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return false;
+  if (s.container_build_failed) return true;
+  if (s.fpm_running) return false;
+  if (s.host_proxy) return Boolean(s.host_has_dev_server);
+  return Boolean(s.uses_php || s.custom_container);
 }
 
-export const brokenSites = derived(sites, ($s) => $s.filter((x) => siteIssue(x) !== null));
+export const brokenSites = derived(sites, ($s) => $s.filter(siteBroken));
 
-export type WorkerDotColor ='amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
+export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
 export interface WorkerDot {
   color: WorkerDotColor;

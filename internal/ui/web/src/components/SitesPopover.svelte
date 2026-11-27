@@ -1,6 +1,5 @@
 <script lang="ts">
   import Popover from '$components/Popover.svelte';
-  import PopoverRow from '$components/PopoverRow.svelte';
   import { buttonMenuBaseClass, buttonMenuToneClass } from '$components/ButtonMenu.svelte';
   import Icon from '$components/Icon.svelte';
   import FrameworkMark from '$components/FrameworkMark.svelte';
@@ -66,13 +65,18 @@
     {#snippet children(close: () => void)}
       <ul class="py-1 max-h-72 overflow-y-auto">
         {#each rows as row (row.domain)}
-          <PopoverRow label={row.domain} onclick={() => open(close, row.domain)}>
-            {#snippet lead()}<StatusDot color={row.color} size="xs" />{/snippet}
-            {#snippet trail()}
+          <li>
+            <button
+              type="button"
+              onclick={() => open(close, row.domain)}
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+            >
+              <StatusDot color={row.color} size="xs" />
+              <span class="flex-1 truncate text-left">{row.domain}</span>
               {#if row.pinned}<span class="inline-flex shrink-0 text-gray-400" title={m.sites_pinned()}><CoffeeMark class="w-3 h-3" /></span>{/if}
               <FrameworkMark name={row.framework} />
-            {/snippet}
-          </PopoverRow>
+            </button>
+          </li>
         {/each}
       </ul>
     {/snippet}

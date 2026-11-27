@@ -14,8 +14,7 @@ vi.mock('./dashboard/SystemHealthWidget.svelte', () => import('./services/Servic
 vi.mock('./dashboard/ResourcesWidget.svelte', () => import('./services/ServiceDetail.stub.svelte'));
 vi.mock('./dashboard/LerdInfoWidget.svelte', () => import('./services/ServiceDetail.stub.svelte'));
 
-const allGood = /running smoothly/;
-const someIssues = /There are some issues/;
+const lerdHealthy = /^Lerd is running smoothly$/;
 
 describe('DashboardTab', () => {
   beforeEach(() => {
@@ -31,42 +30,28 @@ describe('DashboardTab', () => {
     services.set([{ name: 'mysql', status: 'active', site_count: 1 }]);
   });
 
-  it('says everything is running smoothly when nothing is broken, with nothing to open', () => {
-    const { getByText, queryByRole } = render(DashboardTab);
-    expect(getByText(allGood)).toBeTruthy();
-    expect(queryByRole('button', { name: allGood })).toBeNull();
+  it('says lerd is running smoothly, with no site or service counts', () => {
+    const { getByText } = render(DashboardTab);
+    expect(getByText(lerdHealthy)).toBeTruthy();
   });
 
-  it('says not everything is running while a site cannot be served', () => {
+  // Sites and services report themselves in their own cards.
+  it('still says lerd is running smoothly while a site or service is down', () => {
     sites.set([
       { domain: 'up.test', uses_php: true, fpm_running: true },
       { domain: 'down.test', uses_php: true }
     ]);
-    const { queryByText, getByRole } = render(DashboardTab);
-    expect(queryByText(allGood)).toBeNull();
-    expect(getByRole('button', { name: someIssues })).toBeTruthy();
-  });
-
-  it('says not everything is running while a service has failed', () => {
     services.set([
       { name: 'mysql', status: 'active', site_count: 1 },
       { name: 'mailpit', status: 'failed', site_count: 0 }
     ]);
-    const { queryByText, getByText } = render(DashboardTab);
-    expect(queryByText(allGood)).toBeNull();
-    expect(getByText(someIssues)).toBeTruthy();
+    const { getByText } = render(DashboardTab);
+    expect(getByText(lerdHealthy)).toBeTruthy();
   });
 
-  it('still says everything is running smoothly with a paused site and a stopped service', () => {
-    sites.set([
-      { domain: 'up.test', uses_php: true, fpm_running: true },
-      { domain: 'paused.test', uses_php: true, paused: true }
-    ]);
-    services.set([
-      { name: 'mysql', status: 'active', site_count: 1 },
-      { name: 'redis', status: 'inactive', site_count: 0 }
-    ]);
-    const { getByText } = render(DashboardTab);
-    expect(getByText(allGood)).toBeTruthy();
+  it('stops saying lerd is running smoothly when part of lerd is down', () => {
+    status.update((s) => ({ ...s, nginx: { running: false } }) as never);
+    const { queryByText } = render(DashboardTab);
+    expect(queryByText(lerdHealthy)).toBeNull();
   });
 });

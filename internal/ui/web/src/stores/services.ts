@@ -177,12 +177,6 @@ function isWorker(s: Service): boolean {
 
 export const coreServices = derived(services, ($s) => $s.filter((x) => !isWorker(x)));
 
-// A stopped or sleeping service reports inactive; failed is a crash, and offline
-// is an external database server that stopped answering.
-export const failedServices = derived(coreServices, ($s) =>
-  $s.filter((x) => x.status === 'failed' || x.status === 'offline')
-);
-
 // The core services list bucketed by the service's category (databases, cache,
 // messaging…) so the middle panel shows one labelled section per type instead
 // of a flat list. Reuses the same taxonomy the discovery grid groups by.
