@@ -206,7 +206,8 @@ share_log=/tmp/lerd-vm-share.log
 (setsid lerd share </dev/null >"$share_log" 2>&1 &)
 public=""
 for _ in $(seq 60); do
-	public=$(grep -Eo 'https://[a-zA-Z0-9.-]+pinggy[a-zA-Z0-9.-]*' "$share_log" | head -1)
+	# pinggy prints its dashboard link before the tunnel's own URLs
+	public=$(grep -Eo 'https://[a-zA-Z0-9.-]+pinggy[a-zA-Z0-9.-]*' "$share_log" | grep -v '^https://dashboard\.' | head -1)
 	[ -n "$public" ] && break
 	sleep 1
 done
