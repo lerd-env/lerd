@@ -175,10 +175,10 @@ func mkcertTrustBlock(packages []string) string {
 	return block
 }
 
-// caTrustBlock is the image's trust store step: the mkcert CA, the roots the
-// host added locally, then the roots the host has distrusted.
+// caTrustBlock is the image's trust store step: the mkcert CA, then the roots
+// the host has distrusted.
 func caTrustBlock(tmpDir string, packages []string) string {
-	return mkcertCABlock(tmpDir, packages) + hostAddedCABlock(tmpDir) + hostDistrustBlock()
+	return mkcertCABlock(tmpDir, packages) + hostDistrustBlock()
 }
 
 // hostCAConfPath is where Debian, Ubuntu and Alpine list the CA roots
@@ -613,6 +613,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 
 build:
+	containerfile = trustHostCAsFirst(containerfile, hostAddedCABlock(tmp))
 	cfPath := filepath.Join(tmp, "Containerfile")
 	if err := os.WriteFile(cfPath, []byte(containerfile), 0644); err != nil {
 		return false, err

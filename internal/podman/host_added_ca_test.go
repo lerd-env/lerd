@@ -173,3 +173,43 @@ func TestHostAddedCABlock_OffByDefault(t *testing.T) {
 		t.Errorf("staged %v, want none", roots)
 	}
 }
+
+// A proxy that intercepts build downloads needs the company root before the
+// first apk, pecl or install-php-extensions call, so every stage of both real
+// templates trusts it straight after its FROM line.
+func TestTrustHostCAsFirst_EveryStageOfTheRealTemplates(t *testing.T) {
+	block := "COPY " + hostCAPrefix + "*.crt /usr/local/share/ca-certificates/\nRUN update-ca-certificates\n"
+	fpm, err := GetQuadletTemplate("lerd-php-fpm.Containerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	franken, err := GetQuadletTemplate("lerd-frankenphp.Containerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, cf := range map[string]string{"fpm": fpm, "frankenphp": franken, "fast path": "FROM base\nRUN apk add x\n"} {
+		got := trustHostCAsFirst(cf, block)
+		lines := strings.Split(got, "\n")
+		froms := 0
+		for i, line := range lines {
+			if !strings.HasPrefix(line, "FROM ") {
+				continue
+			}
+			froms++
+			if i+1 >= len(lines) || lines[i+1] != strings.Split(block, "\n")[0] {
+				t.Errorf("%s: stage %q does not trust the host roots first", name, line)
+			}
+		}
+		if froms == 0 {
+			t.Fatalf("%s: no FROM lines", name)
+		}
+	}
+}
+
+// Nothing opted in leaves the Containerfile exactly as it was.
+func TestTrustHostCAsFirst_NoBlockNoChange(t *testing.T) {
+	cf := "FROM base\nRUN apk add x\n"
+	if got := trustHostCAsFirst(cf, ""); got != cf {
+		t.Errorf("got %q, want unchanged", got)
+	}
+}

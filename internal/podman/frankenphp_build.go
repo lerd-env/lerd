@@ -173,6 +173,7 @@ func buildFrankenPHPImage(version string, force bool, customExts, packages []str
 	if err != nil {
 		return err
 	}
+	containerfile = trustHostCAsFirst(containerfile, hostAddedCABlock(tmp))
 
 	cfPath := filepath.Join(tmp, "Containerfile")
 	if err := os.WriteFile(cfPath, []byte(containerfile), 0644); err != nil {

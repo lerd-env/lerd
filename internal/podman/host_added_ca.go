@@ -113,3 +113,24 @@ func stageHostCA(tmpDir string, der []byte) bool {
 	out := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	return os.WriteFile(dest, out, 0o644) == nil
 }
+
+// trustHostCAsFirst puts the host-roots step straight after every FROM, so a
+// proxy that intercepts build downloads is trusted before the first apk or pecl
+// call. Done here rather than in the templates so their hashes stay put.
+func trustHostCAsFirst(containerfile, block string) string {
+	if block == "" {
+		return containerfile
+	}
+	lines := strings.SplitAfter(containerfile, "\n")
+	var b strings.Builder
+	for _, line := range lines {
+		b.WriteString(line)
+		if strings.HasPrefix(line, "FROM ") {
+			if !strings.HasSuffix(line, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString(block)
+		}
+	}
+	return b.String()
+}
