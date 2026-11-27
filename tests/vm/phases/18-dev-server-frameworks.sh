@@ -17,7 +17,10 @@ CONFD=${XDG_DATA_HOME:-$HOME/.local/share}/lerd/nginx/conf.d
 UNITS=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 # npm 10 crashes resolving Nest's optional peers without this.
 export npm_config_legacy_peer_deps=true
+# ssh runs a non-interactive shell, and Debian's .bashrc returns before lerd's PATH line.
+export PATH=${XDG_DATA_HOME:-$HOME/.local/share}/lerd/bin:$PATH
 idle_was=$(lerd idle status </dev/null 2>/dev/null | grep -oE 'timeout [0-9hms]+' | cut -d' ' -f2)
+idle_on=$(lerd idle status </dev/null 2>/dev/null | grep -c 'Idle-suspend: enabled')
 
 # define <name> <manifest> <package> <dev command> <port> <worker> <check> [extra yaml]
 # Detects on <package>-vmlane, which only detects() writes: the real package may
@@ -294,7 +297,14 @@ free_port
 (cd "$nest" && lerd restart) </dev/null
 check "18.14 the declared port comes back once free" on_port "$nest" "$port"
 check "18.14 and the site answers" answers "$nest" 'Hello SAVED'
+# A stop right after a start used to leave a node past the SIGTERM for systemd's 90s.
+u=$(unit "$nest")
+check "18.21 a dev server stopped right after it starts stops within 20s" bash -c "systemctl --user start $u; sleep 1; s=\$(date +%s); systemctl --user stop $u; [ \$((\$(date +%s) - s)) -le 20 ]"
+systemctl --user start "$u"
+check "and it serves again" wait_for 60 answers "$nest" 'Hello SAVED'
 
+# Phase 6 leaves idle-suspend off, so turn it on for the sleep and put it back after.
+lerd idle on </dev/null >/dev/null 2>&1
 lerd idle timeout 1m </dev/null
 check "the site falls asleep" wait_for 240 bash -c "! systemctl --user is-active -q $(unit "$nest")"
 hold_port "$port"
@@ -303,6 +313,7 @@ check "18.15 with nginx following" wait_for 30 moved "$nest"
 free_port
 (cd "$nest" && lerd restart) </dev/null
 lerd idle timeout "${idle_was:-30m}" </dev/null
+[ "$idle_on" = 1 ] || lerd idle off </dev/null >/dev/null 2>&1
 
 (cd "$nest" && lerd stop) </dev/null >/dev/null 2>&1
 hold_port "$port"

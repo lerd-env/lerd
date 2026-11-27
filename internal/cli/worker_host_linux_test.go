@@ -630,3 +630,26 @@ func TestWriteHostWorkerUnitFile_restoresDevServerFilesBeforeStart(t *testing.T)
 		t.Errorf("a unit with no dev server got a pre-start step:\n%s", unit)
 	}
 }
+
+// A dev server stopped while npm is still starting it can miss the SIGTERM, and
+// systemd's default would then hold every stop, sleep or restart for 90s.
+func TestWriteHostWorkerUnitFile_capsTheStopWait(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-vite-mysite", "Vite", "mysite",
+		t.TempDir(), "8.4", "npm run dev",
+		"on-failure", "", "lerd-php84-fpm", "", true,
+	); err != nil {
+		t.Fatalf("writeWorkerUnitFile (host): %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-vite-mysite.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	if !strings.Contains(string(data), "\nTimeoutStopSec=10\n") {
+		t.Errorf("host worker unit must cap its stop at 10s, got:\n%s", data)
+	}
+}
