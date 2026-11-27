@@ -49,15 +49,15 @@ func TestUninstallPlan_ForceRemovesEverything(t *testing.T) {
 	}
 }
 
-func stubDesktopFlatpak(t *testing.T, installed bool) {
+func stubDesktopApp(t *testing.T, installed bool) {
 	t.Helper()
-	orig := desktopFlatpakInstalled
-	desktopFlatpakInstalled = func() bool { return installed }
-	t.Cleanup(func() { desktopFlatpakInstalled = orig })
+	orig := desktopAppInstalled
+	desktopAppInstalled = func() bool { return installed }
+	t.Cleanup(func() { desktopAppInstalled = orig })
 }
 
 func TestUninstallPlan_ForceRemovesInstalledDesktopApp(t *testing.T) {
-	stubDesktopFlatpak(t, true)
+	stubDesktopApp(t, true)
 	p, err := uninstallPlanFor(true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestUninstallPlan_ForceRemovesInstalledDesktopApp(t *testing.T) {
 }
 
 func TestUninstallPlan_NoDesktopAppToRemove(t *testing.T) {
-	stubDesktopFlatpak(t, false)
+	stubDesktopApp(t, false)
 	p, err := uninstallPlanFor(true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestUninstallPlan_NoDesktopAppToRemove(t *testing.T) {
 
 // A reinstall finds the app already there and reuses it.
 func TestUninstallPlan_KeepDataKeepsDesktopApp(t *testing.T) {
-	stubDesktopFlatpak(t, true)
+	stubDesktopApp(t, true)
 	p, err := uninstallPlanFor(false, true)
 	if err != nil {
 		t.Fatal(err)
