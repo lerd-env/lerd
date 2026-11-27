@@ -329,4 +329,4 @@ external_stop_shows() {
 	[ "$was_up" = 1 ] || lerd service stop mailpit >/dev/null 2>&1
 	return $rc
 }
-check "10.95 a service stopped and started outside lerd shows within seconds" external_stop_shows
+check "10.94 a service stopped and started outside lerd shows within seconds" external_stop_shows
