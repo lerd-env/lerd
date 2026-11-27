@@ -523,6 +523,9 @@ left there is where resolved fails over after one dropped upstream query:
       with SIGTERM or `kill -9` takes its whole process group with it, and
       Ctrl+Z, `fg` and Ctrl+C in an interactive shell stop, resume and end it
       with the shell still usable
+- [ ] A root CA added on the host (a company CA in the distro's local anchor
+      folder) is refused inside the PHP image until `lerd php:trust-host-ca on`
+      and `lerd php:rebuild`, then trusted, and gone again after `off` and a rebuild
 
 ---
 
@@ -858,6 +861,14 @@ lerd worktree add -b feat-x
 - [ ] With `trust_ca: true` and a re-link a custom container on a Debian, an Alpine and a Fedora
       image reaches another secured site and a public one over HTTPS (skipped on a
       `.localhost` install, which has no HTTPS)
+- [ ] `lerd unlink --delete-files` with no terminal and no `--yes` refuses, and
+      the site stays linked with its folder on disk
+- [ ] `lerd unlink --delete-files --yes` on a parked site deletes its folder and
+      drops it from `lerd sites`
+- [ ] `lerd unlink --delete-files --yes` on a site holding a parked directory
+      refuses before unlinking, and the site still answers **200**
+- [ ] `lerd unlink --delete-files --yes` on a site holding another linked site
+      refuses, naming the inner site, and leaves both folders in place
 - [ ] On a public `lerd share` of a site that keeps its files in RustFS, a
       bucket file linked from a page points at the tunnel and loads from it
 
@@ -930,6 +941,8 @@ Dashboard (drive it in a browser, not with curl):
       a site inside a bigger repository gets no button
 - [ ] With the window unfocused but visible, the pings and pulses stop and CPU
       settles; focusing it brings them back
+- [ ] Left open and idle for a minute, the dashboard does not refresh itself
+      every second and `lerd-ui` stays near idle in `top`
 - [ ] Worker button labels stay on one line, the header's corner is rounded
       where it meets the content, and a rail launcher's hover is square
 - [ ] The status sits in the header as a pill and turns red naming what is down
@@ -1279,6 +1292,10 @@ Run last on each guest, because it is destructive.
 - [ ] `lerd uninstall --force` skips prompts on a second guest
 - [ ] Reinstall on top of the uninstalled machine and **https → 200** again on a
       re-linked existing project, with its data intact
+- [ ] On macOS, by hand: `lerd uninstall` asks to remove the desktop app, quits
+      it and deletes `Lerd.app`; its `~/Library/Application Support/Lerd` goes
+      only with **remove my data**, and an app that will not quit is left in
+      place with a note. No other `Lerd.app`, the launcher included, is touched
 
 ---
 
@@ -1489,6 +1506,8 @@ compiler skips Rails. The lane needs at least one guest with all four.
 - [ ] `lerd restart` and a re-link keep the moved port
 - [ ] The committed `.lerd.yaml` is never rewritten by a move
 - [ ] The declared port comes back on a restart once it is free
+- [ ] A dev server stopped a second after it starts stops within seconds, not
+      systemd's default 90
 - [ ] A sleeping site whose port was taken meanwhile wakes on another
 - [ ] `lerd start` moves a site whose port is taken
 - [ ] A port edited in `.lerd.yaml` reaches nginx and the server on `lerd link`

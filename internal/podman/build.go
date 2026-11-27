@@ -613,6 +613,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 
 build:
+	containerfile = trustHostCAsFirst(containerfile, hostAddedCABlock(tmp))
 	cfPath := filepath.Join(tmp, "Containerfile")
 	if err := os.WriteFile(cfPath, []byte(containerfile), 0644); err != nil {
 		return false, err

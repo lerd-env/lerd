@@ -93,6 +93,16 @@ export default {
       "Lerd tourne dans WSL2 avec la même CLI, le même tableau de bord, les mêmes services et le même serveur MCP. L'installateur Windows configure tout, et le guide WSL2 détaille chaque étape.",
     ],
   },
+  desktop: {
+    label: "Application de bureau", h: ["Lerd,", "en application de bureau."],
+    lead: "Une application compagnon facultative qui ouvre le tableau de bord dans sa propre fenêtre et affiche les notifications de Lerd en natif. Lerd fonctionne de la même façon sans elle.",
+    arm: "Apple silicon", intel: "Intel", windows: "Installateur Windows",
+    items: [
+      "Signée et notarisée par Apple, elle s'ouvre sans avertissement et se met à jour toute seule. L'installateur la propose aussi.",
+      "Un Flatpak issu du dépôt de Lerd, tenu à jour par flatpak update ou votre logithèque.",
+      "Déjà incluse dans l'installateur Windows, rien de plus à télécharger.",
+    ],
+  },
   principles: {
     label: 'Principes', h: ['Comment Lerd', 'est conçu.'],
     items: [

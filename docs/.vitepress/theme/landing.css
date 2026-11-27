@@ -187,6 +187,12 @@
 .lerd-landing .price .p{min-height:0}
 .lerd-landing .price-tag{font:500 13px var(--mono);color:var(--muted);margin-left:8px;letter-spacing:0}
 .lerd-landing .plat .explore{margin-top:auto;padding-top:6px}
+.lerd-landing .desk .desk-row,.lerd-landing .desk .cmd{margin-top:auto}
+/* The Flatpak command is one unbroken line, so let the card shrink and the code ellipsize. */
+.lerd-landing .desk .p{min-width:0}
+.lerd-landing .grid6.desk{grid-template-columns:1fr 2fr 1fr}
+.lerd-landing .desk .desk-row{display:flex;flex-wrap:wrap;gap:8px}
+.lerd-landing .desk .cmd{font-size:12px;padding:8px 8px 8px 12px;gap:10px}
 .lerd-landing .card .names{display:flex;flex-wrap:wrap;font:12px/1.9 var(--mono);color:var(--muted)}
 .lerd-landing .card .names i{color:var(--faint);font-style:normal;padding:0 6px}
 .lerd-landing .fw-port{display:block;font:13px var(--mono);color:var(--muted);font-weight:400;margin-top:2px}
@@ -332,6 +338,7 @@
 @media (max-width:960px){
   /* Three plans never split two and one. */
   .lerd-landing .grid6.price{grid-template-columns:1fr}
+  .lerd-landing .grid6.desk{grid-template-columns:1fr}
   .lerd-landing .cta .hero-row{grid-template-columns:1fr 1fr;width:auto}
   .lerd-landing .cta .hero-row .cmd{grid-column:1/-1}
   .lerd-landing .hdr nav{display:none}

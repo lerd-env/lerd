@@ -12,7 +12,8 @@ func TestMain(m *testing.M) {
 	hostIPv6LoopbackFn = func() bool { return true }
 	// Keep the live podman ps out of tests that fake inspect through execCommand.
 	runningPsFn = func() (string, error) { return "", nil }
-	// Builds must not pick up the distrusted roots of whoever runs the suite.
+	// Builds must not pick up the added or distrusted roots of whoever runs the suite.
 	hostCAConfPath = os.DevNull
+	hostAddedCASources = nil
 	os.Exit(m.Run())
 }

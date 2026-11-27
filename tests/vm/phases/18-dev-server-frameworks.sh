@@ -297,6 +297,11 @@ free_port
 (cd "$nest" && lerd restart) </dev/null
 check "18.14 the declared port comes back once free" on_port "$nest" "$port"
 check "18.14 and the site answers" answers "$nest" 'Hello SAVED'
+# A stop right after a start used to leave a node past the SIGTERM for systemd's 90s.
+u=$(unit "$nest")
+check "18.21 a dev server stopped right after it starts stops within 20s" bash -c "systemctl --user start $u; sleep 1; s=\$(date +%s); systemctl --user stop $u; [ \$((\$(date +%s) - s)) -le 20 ]"
+systemctl --user start "$u"
+check "and it serves again" wait_for 60 answers "$nest" 'Hello SAVED'
 
 # Phase 6 leaves idle-suspend off, so turn it on for the sleep and put it back after.
 lerd idle on </dev/null >/dev/null 2>&1

@@ -52,7 +52,7 @@ lerd php:update 8.4          # just this one
 lerd php:list                # what is installed for the active runtime
 ```
 
-Installing a version from the dashboard (**System → PHP → Install**) does the same: it fetches the native build and starts its listener, rather than building an image the native runtime would never use. `lerd start` fetches the default version and any version a site runs that is missing, the way the container runtime builds the default's image. If a build is republished under the same version, a download that fails its checksum against the cached pins re-reads them once before giving up.
+Installing a version from the dashboard (**System → PHP → Install**) does the same: it fetches the native build and starts its listener, rather than building an image the native runtime would never use. Its list offers only the versions with a native build published for your Mac, so a new PHP release shows up there once its build is. `lerd start` fetches the default version and any version a site runs that is missing, the way the container runtime builds the default's image. If a build is republished under the same version, a download that fails its checksum against the cached pins re-reads them once before giving up.
 
 Builds are published per PHP patch, so `8.4.24` and `8.4.25` are separate downloads and lerd pins one of them per minor. `lerd php:update` re-reads the pins past their cache, which matters because the passive check only looks once a day and the point of running it by hand is to find out now.
 

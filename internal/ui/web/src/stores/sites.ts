@@ -277,6 +277,24 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
   return s.fpm_running ? 'green' : 'gray';
 }
 
+// The host-proxy dev server's worker name (config.HostProxyWorkerName), the only
+// request-serving process idle-suspend stops; sleeping workers leave PHP serving.
+const hostProxyWorker = 'app';
+
+// siteBroken flags sites lerd should serve but cannot, excluding paused sites
+// and sleeping host-proxy servers. nginx serves static sites itself; host-proxy
+// servers belong to the user unless lerd runs them.
+export function siteBroken(s: Site): boolean {
+  if (s.paused) return false;
+  if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return false;
+  if (s.container_build_failed) return true;
+  if (s.fpm_running) return false;
+  if (s.host_proxy) return Boolean(s.host_has_dev_server);
+  return Boolean(s.uses_php || s.custom_container);
+}
+
+export const brokenSites = derived(sites, ($s) => $s.filter(siteBroken));
+
 export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
 export interface WorkerDot {
@@ -666,7 +684,24 @@ export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
 export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
-export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
+// unlinkSite unlinks a site and, given the site's name typed back, deletes its directory.
+export const unlinkSite = (d: string, deleteDirConfirm?: string) =>
+  postAction(
+    site(d, 'unlink') +
+      (deleteDirConfirm === undefined ? '' : `?delete_dir=1&confirm=${encodeURIComponent(deleteDirConfirm)}`)
+  );
+
+// What deleting a site's directory takes with it; refused says why it cannot be.
+export interface SiteDirReport {
+  path: string;
+  inside_worktrees?: string[];
+  outside_worktrees?: string[];
+  uncommitted?: string[];
+  unpushed?: number;
+  unchecked?: string[];
+  refused?: string;
+}
+export const previewSiteDirDelete = (d: string) => apiJson<SiteDirReport>(site(d, 'unlink:preview'));
 // addSuggestedService takes up a suggestion, as preset at version when the
 // picker chose another preset or version for it.
 export const addSuggestedService = (d: string, name: string, preset = '', version = '') => {

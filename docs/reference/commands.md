@@ -78,6 +78,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd link [name]` | Register the current directory as a site at `name.test`, the directory name when `name` is left out. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
 | `lerd domain add <name>` | Serve the current site on another domain as well, see [Domains](../usage/domains.md) |
 | `lerd unlink [name]` | Stop serving the site; defaults to the site in the current directory, and naming one is the way to unlink a site whose directory has moved or been deleted |
+| `lerd unlink [name] --delete-files [--yes]` | Unlink the site and delete its project directory, after naming what goes with it and confirming |
 | `lerd sites` | Table view of all registered sites, with a Status column saying whether each one is running, stopped or paused |
 | `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first; `--list` shows what is kept, `--force` skips the prompt |
 | `lerd open [name]` | Open the site in the default browser |
@@ -179,6 +180,7 @@ Supported PHP versions: **8.6**, **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, an
 | `lerd php:odbc add <name> <path-to-driver.so> [--description TEXT]` | Register a vendor ODBC driver under the name a DSN's `Driver={...}` asks for; lerd writes the odbcinst registry every PHP container mounts and reports what the image makes of the driver |
 | `lerd php:odbc remove <name>` | Unregister an ODBC driver |
 | `lerd php:odbc list` | List the registered ODBC drivers and whether each one loads in the current version's image |
+| `lerd php:trust-host-ca <on\|off>` | Opt in to trusting the root CAs this machine added (a company CA) inside every PHP image; off by default, applied on the next `lerd php:rebuild` |
 | `lerd php:ports add <host:container...> [--php VERSION]` | Publish extra host ports on the version's shell (FPM) container so a process in `lerd shell` is reachable at `localhost:PORT`; a bare number publishes straight through, and a busy host port shifts to the next free one |
 | `lerd php:ports remove <host...> [--php VERSION]` | Unpublish host ports from the version's shell container |
 | `lerd php:ports list [--php VERSION]` | List the extra host ports published for a PHP version |

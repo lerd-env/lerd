@@ -93,6 +93,16 @@ export default {
       'Lerd 运行在 WSL2 中，拥有同样的 CLI、控制台、服务和 MCP 服务器。Windows 安装程序会完成全部配置，WSL2 指南会讲解每一步。',
     ],
   },
+  desktop: {
+    label: "桌面应用", h: ["Lerd，", "桌面应用版。"],
+    lead: "一个可选的配套应用，在独立窗口中打开仪表盘，并以原生方式显示 Lerd 的通知。没有它，Lerd 也照常工作。",
+    arm: "Apple 芯片", intel: "Intel", windows: "Windows 安装程序",
+    items: [
+      "经 Apple 签名和公证，打开时不会弹出警告，并且会自动更新。安装程序也会提供它。",
+      "来自 Lerd 自有仓库的 Flatpak，通过 flatpak update 或软件中心保持最新。",
+      "已包含在 Windows 安装程序中，无需额外下载。",
+    ],
+  },
   principles: {
     label: '设计原则', h: ['Lerd', '是这样构建的。'],
     items: [

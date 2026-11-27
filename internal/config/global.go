@@ -117,6 +117,9 @@ type GlobalConfig struct {
 		// odbcinst.ini every PHP container mounts. The images ship unixODBC and
 		// the odbc extensions; the licensed driver files stay on the host.
 		ODBCDrivers []ODBCDriver `yaml:"odbc_drivers,omitempty" mapstructure:"odbc_drivers"`
+		// TrustHostCA copies the root CAs the host added locally (a company CA,
+		// say) into every PHP image lerd builds (lerd php:trust-host-ca). Off by default.
+		TrustHostCA bool `yaml:"trust_host_ca,omitempty" mapstructure:"trust_host_ca"`
 		// Realised records what each version's image actually loaded, verified
 		// after its build. The declared set above is what the user asked for; not
 		// every version can honour all of it (mongodb needs 8.1+, the 7.4/8.0

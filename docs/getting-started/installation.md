@@ -360,10 +360,14 @@ gh attestation verify lerd_<version>_linux_amd64.tar.gz --repo lerd-env/lerd
 
 The dashboard runs in any browser, but [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps it in a dedicated window with [native desktop notifications](../features/notifications) for captured mail, worker failures and finished operations. It is optional and entirely separate from the lerd install itself, which keeps working unchanged without it.
 
-It ships for Linux as a Flatpak:
+On **macOS** it is a DMG, signed and notarized by Apple, that updates itself. Download [Lerd-arm64.dmg](https://github.com/lerd-env/lerd-desktop/releases/latest/download/Lerd-arm64.dmg) for Apple silicon or [Lerd-x64.dmg](https://github.com/lerd-env/lerd-desktop/releases/latest/download/Lerd-x64.dmg) for Intel, open it and drag Lerd to Applications. The one-line installer offers to do this for you.
+
+On **Windows** it comes with the [Windows installer](https://github.com/lerd-env/lerd-desktop/releases/latest/download/Install-Lerd.exe), so there is nothing else to install.
+
+On **Linux** it ships as a Flatpak:
 
 ```bash
 flatpak install --user https://lerd.sh/lerd.flatpakref
 ```
 
-Update it with `flatpak update`. Once it is installed, `lerd dashboard` and the tray's **Open Dashboard** open the app instead of a browser tab, and clicking a native notification opens it through its `lerd://` scheme. On a fresh Linux install with Flatpak available, the one-line installer offers to install it for you.
+Update it with `flatpak update`, or let your software centre do it. Once it is installed, `lerd dashboard` and the tray's **Open Dashboard** open the app instead of a browser tab, and clicking a native notification opens it through its `lerd://` scheme. On a fresh Linux install with Flatpak available, the one-line installer offers to install it for you.

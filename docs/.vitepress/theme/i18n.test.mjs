@@ -61,6 +61,7 @@ test('the copy lines up with the data it is joined to', async () => {
   assert.equal(en.agents.items.length, D.AGENT_CMDS.length)
   assert.equal(en.runtimes.items.length, D.RUNTIME_CMDS.length)
   assert.equal(en.platforms.items.length, D.PLATFORMS.length)
+  assert.equal(en.desktop.items.length, D.DESKTOP.badges.length)
   assert.equal(en.compare.rows.length, D.CMP.rows.length)
   assert.equal(en.faq.items.length, D.FAQ_LINKS.length)
   D.FAQ_LINKS.forEach((href, i) => assert.equal(Boolean(href), 'link' in en.faq.items[i], `FAQ ${i}`))

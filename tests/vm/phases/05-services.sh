@@ -155,8 +155,9 @@ lerd service add --name vmghost --image docker.io/library/nginx:alpine </dev/nul
 lerd service start vmghost </dev/null >/dev/null 2>&1
 wait_for 30 bash -c 'podman ps --format "{{.Names}}" | grep -qx lerd-vmghost'
 rm -f "$HOME/.config/lerd/services/vmghost.yaml"
-# The stats endpoint samples on an interval, so a container just started shows on the next sample.
-wait_for 20 bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"'"
+# The stats endpoint samples on an interval, so wait for a sample taken after the
+# definition was removed, not merely one that lists the container.
+wait_for 20 bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"[^}]*\"orphaned\":true'"
 check_out "an orphaned service container shows and its trash action removes it" 'orphan=true.*gone' bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"[^}]*\"orphaned\":true' && echo orphan=true; curl -s -X POST -H 'X-Lerd-CSRF: 1' http://127.0.0.1:7073/api/services/vmghost/remove >/dev/null; test -e ~/.config/containers/systemd/lerd-vmghost.container || echo gone"
 lerd service start mailpit </dev/null >/dev/null 2>&1
 

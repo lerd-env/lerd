@@ -371,18 +371,24 @@ var OnStampWritten func()
 // WriteStamp records the installed version of a tool in its sidecar, so
 // status can report it without executing anything.
 func WriteStamp(name, version string) error {
-	path := stampPath(name)
-	// mise's stamp is not beside its binary, so its dir may not exist yet.
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(version+"\n"), 0o644); err != nil {
+	if err := recordStamp(name, version); err != nil {
 		return err
 	}
 	if OnStampWritten != nil {
 		OnStampWritten()
 	}
 	return nil
+}
+
+// recordStamp writes the version without announcing an install, for a version
+// read off a binary that was already there.
+func recordStamp(name, version string) error {
+	path := stampPath(name)
+	// mise's stamp is not beside its binary, so its dir may not exist yet.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(version+"\n"), 0o644)
 }
 
 // WritePublished records when the build now on disk was published, and clears
@@ -447,7 +453,9 @@ func InstalledVersion(name string) string {
 	}
 	v := probeVersion(name, path)
 	if v != "" {
-		_ = WriteStamp(name, v)
+		// Not an install: announcing one made lerd-ui rebuild its status, which
+		// reads mise's version again, in a loop while a dashboard was open.
+		_ = recordStamp(name, v)
 	}
 	return v
 }

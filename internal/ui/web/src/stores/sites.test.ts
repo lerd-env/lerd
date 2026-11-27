@@ -84,6 +84,37 @@ describe('sites store', () => {
     expect(siteDotColor(undefined)).toBe('gray');
   });
 
+  it('siteBroken flags a site lerd should serve but cannot, never one stopped on purpose', async () => {
+    const { siteBroken } = await import('./sites');
+    expect(siteBroken({ domain: 'a.test', uses_php: true })).toBe(true);
+    expect(siteBroken({ domain: 'a.test', custom_container: true, container_port: 8000 })).toBe(true);
+    expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true, container_build_failed: true })).toBe(true);
+    expect(siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true })).toBe(true);
+    // A sleeping queue leaves the site's request-serving process expected up.
+    expect(siteBroken({ domain: 'a.test', uses_php: true, idle_suspended: true, idle_suspended_workers: ['queue'] })).toBe(true);
+    expect(
+      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['queue'] })
+    ).toBe(true);
+
+    expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true })).toBe(false);
+    expect(siteBroken({ domain: 'a.test', uses_php: true, paused: true })).toBe(false);
+    expect(
+      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['app'] })
+    ).toBe(false);
+    expect(siteBroken({ domain: 'a.test', host_proxy: true })).toBe(false);
+    expect(siteBroken({ domain: 'a.test' })).toBe(false);
+  });
+
+  it('brokenSites lists only the broken sites', async () => {
+    const { sites, brokenSites } = await import('./sites');
+    sites.set([
+      { domain: 'up.test', uses_php: true, fpm_running: true },
+      { domain: 'down.test', uses_php: true },
+      { domain: 'paused.test', uses_php: true, paused: true }
+    ]);
+    expect(get(brokenSites).map((s) => s.domain)).toEqual(['down.test']);
+  });
+
   it('saveSiteEnv PUTs JSON body to the site env endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true, backup_path: '.env.20260528-103045' }), {
