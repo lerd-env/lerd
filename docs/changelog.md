@@ -7,7 +7,11 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.40.0-beta.1] - 2026-11-23
+## [1.40.0-beta.2] - 2026-11-27
+
+A framework definition can now describe a project that is not PHP. A NestJS, Django, Rails or Rust app keeps its framework when linked, runs its own dev server on the host with its env wiring, workers, commands and doctor checks, moves to a free port when its own is taken, and sleeps and wakes with idle-suspend. `lerd new` can start a project from a starter, such as a Laravel app with Filament or one of the official React, Vue or Livewire kits, and `lerd test` runs whatever test runner the store declares for the project, with an MCP tool that does the same.
+
+A worktree can run its own queue, Horizon and scheduler on Redis keys of its own, and a site's overview can add any installed service. The macOS binaries are signed and notarized, and the desktop app raises lerd's notifications there natively.
 
 Several people can now share one Linux machine. A second user installing or starting lerd while someone else's lerd holds the ports is told whose it is and that they need to run `lerd quit`, and `lerd multi-user enable` goes further: each user's lerd follows the screen, stepping aside when another user's desktop takes it and coming back when its own does.
 
@@ -17,6 +21,18 @@ On macOS, nginx stays on loopback through a launchd port forward instead of a pf
 
 ### Added
 
+- **Start a new project from a starter** (#2734, contributed by @JonPurvis). Starters come from the frameworks store, each covering the framework majors it supports. `lerd new --starter`, the new project wizard's Starter choice and the MCP `project_new` tool can hand you a Laravel app with Filament or one of the official React, Vue or Livewire kits, and a starter that doesn't cover the chosen version is refused with the ones that do.
+- **Signed macOS binaries and native notifications through the desktop app** (#2744). The macOS `lerd` and `lerd-tray` binaries are signed with the project's Developer ID and notarized. When the desktop app is running it raises lerd's notifications natively, `lerd dashboard` opens it when installed, and a fresh macOS install offers to install it.
+- **Framework definitions for projects that are not PHP** (#2718). A definition can carry a `dev_server` with the command and port to run, recognised from package.json, requirements.txt, pyproject.toml, Gemfile or Cargo.toml. `lerd init` and the site wizard offer it, `lerd link` refuses such a project until it is set up rather than serving it as PHP, and a definition that declares `move_port` starts the server on a free port with nginx following while its own is taken.
+- **Suggest letting unused services sleep** (#2716). With Sleep unused services off, the dashboard suggests it once at least three services used only by idle sites hold 400 MB or more between them, and either answer is saved.
+- **Open a new site in the browser from the end of the site wizard** (#2712, contributed by @JonPurvis).
+- **A custom container can trust lerd's CA** (#2708). With `trust_ca: true` under `container` in `.lerd.yaml`, lerd adds its CA as a last build step, so the container can call other lerd sites over HTTPS.
+- **A paused site gives up its PHP and Node versions** (#2700, #2711). Pausing stops an FPM no active site or worktree needs, and a paused site no longer keeps its PHP or Node version from being removed.
+- **`lerd test` and an MCP `test` tool** (#2691). A framework or composer package declares its test runner in the store, `lerd test` and the MCP tool run it, with an optional file and filter, and the MCP server now stops a cancelled run and everything it started.
+- **`lerd php:runtime native` offers to remove the PHP-FPM images** (#2689, contributed by @JonPurvis), as moving to the native runtime from the dashboard already did.
+- **`lerd sites` and the site tiles say whether each site is running** (#2682, #2652, contributed by @JonPurvis). The Status column reads running, stopped or paused, and each tile's subline starts with the site's status.
+- **Add a service to a site from its overview** (#2661). The Services section lists the installed services the site does not use and adds the pick to `.lerd.yaml`.
+- **A worktree runs its own queue, Horizon and scheduler** (#2648). The worktree tab offers every worker that applies to the worktree, off until switched on, and a framework can declare `worktree.worker_env` so those workers use Redis keys of their own instead of taking main's jobs.
 - **Several users sharing one Linux machine** (#2613). Install and start read the owner of each listening socket, so when another user's lerd holds the ports they name that user and say to run `lerd quit`, instead of pointing at Laravel Herd. `lerd multi-user enable` makes each user's watcher follow logind's seat0: when another user's desktop takes the screen it stops everything `lerd quit` would, and when its own desktop comes back it waits for the other lerd to let go of the ports and starts the stack again. A locked screen keeps the stack, and a stack stopped by hand stays stopped.
 - **Name the worker behind each dot in the sites list** (#2633). Each worker dot in the sites list and the overview tiles shows the worker's name in a tooltip, a sleeping site's dimmed dots name the workers that were suspended, and the moon above them explains the sleep, contributed by @JonPurvis.
 - **Remove the desktop app on `lerd uninstall`** (#2619). A plain uninstall asks whether to remove the `sh.lerd.Desktop` flatpak when it is installed for the user, defaulting to yes, closes the app first and removes its sandbox data only when the Lerd data goes too. `--force` removes it without asking, `--keep-data` keeps it, and every installed branch of the app is removed, a stable install next to a development build included.
@@ -25,10 +41,41 @@ On macOS, nginx stays on loopback through a launchd port forward instead of a pf
 
 ### Changed
 
+- **The dashboard header speaks for lerd alone** (#2737, contributed by @JonPurvis). It reads "Lerd is running smoothly" while DNS, Nginx and the watcher are up, the site and service counts are gone, and the Sites pill turns yellow while a site lerd should be serving can't be.
+- **The sites list buttons rest as one until hovered** (#2714).
+- **fnm is no longer installed** (#2697). mise is the Node version manager, and fnm is used only where it is already installed, the way lerd treats a user's own nvm.
+- **The `_testing` database is created only for projects whose tests use it** (#2686, contributed by @JonPurvis). A project whose `phpunit.xml` runs its tests on SQLite or another database gets no empty twin.
 - **Idle-suspend is on by default** (#2611). A site's workers stop once it has been idle past the timeout and come back on the next request, CLI command, MCP call or file save. Putting idle services to sleep stays off. Turning idle-suspend off is now saved as an explicit choice, and since earlier releases never recorded off, anyone who ran `lerd idle off` before gets it switched back on once and can turn it off again.
 
 ### Fixed
 
+- **A dev server stopped right after it started held the stop for 90 seconds** (#2755). A host worker unit now gives its process 10 seconds before systemd kills what is left, so sleeping, restarting or stopping such a site no longer hangs.
+- **System > PHP offered versions the native runtime has no build for** (#2754, contributed by @JonPurvis).
+- **A site failed for a few seconds after `lerd service update` or `rollback`** (#2748). Both now wait until the service accepts connections before saying done.
+- **The host PHP fallback stayed on old releases** (#2742). static-php.dev moved its prebuilt binaries, and lerd now fetches them from the new place.
+- **The snapshot schedule's interval controls were different sizes** (#2739, contributed by @JonPurvis).
+- **Composer through the MCP exec tool ignored the global auth.json** (#2732, contributed by @timodejong95). It now runs with the same composer home as `lerd composer`.
+- **Only the bottom row of a TUI dashboard card was clickable** (#2729).
+- **Unlinking a site from the dashboard left its route in the address bar** (#2728, contributed by @JonPurvis).
+- **The dashboard kept running a plugin's old scripts after an update** (#2717). Plugin pages are served with no-cache, and a site tab's plugin calls now run in the worktree it shows, with `LERD_BRANCH` set.
+- **Uninstall left lerd's `.test` resolver and env values in place** (#2709). On macOS a resolver file Herd or Valet had written is kept and put back on uninstall, and uninstall offers to put each linked project's env values back.
+- **A custom container kept serving its old image after a rebuild** (#2707). `lerd link` restarts the container when its image was rebuilt, and a failed build is shown on the site.
+- **A first install on Windows could leave the dashboard down** (#2704).
+- **install.ps1 hid why Windows refused to elevate** (#2705). The message now includes what Windows said.
+- **`lerd php:ext add` built on the project's PHP instead of the site's** (#2703). Version-scoped commands run on the version the site is served on.
+- **The site wizard showed the picked directory twice** (#2701).
+- **`lerd uninstall` from a Windows terminal left lerd.exe's folder behind** (#2696).
+- **A linked site with no pinned PHP jumped to the newest installed version** (#2685, contributed by @JonPurvis). It stays on the version it is served on.
+- **lerd env replaced an external database with lerd's own** (#2678). Runs that lerd starts by itself, on a runtime switch or a port move, keep a database the site points elsewhere.
+- **The remove worktree dialog stayed open after the worktree was gone** (#2677).
+- **The generated Claude skill's frontmatter was not valid YAML** (#2672, contributed by @SHJordan).
+- **Removing one worktree broke the vhosts of the others** (#2664). On a host-proxy site the remaining worktrees answered 502 until something rewrote them.
+- **Host-proxy worktrees landed on their parent's dev server port** (#2657, contributed by @ExeQue). Each now gets a port of its own.
+- **wp-cli run from lerd's phar got no env_provider values** (#2663).
+- **A crafted path could take the dashboard's claim redirect off its host** (#2659).
+- **The macOS tray icon looked smaller than its neighbours** (#2658).
+- **An nginx reload on macOS could fail right after a vhost was rewritten** (#2655). It retries while the shared folder catches up with the rename.
+- **Native-runtime commands ran on the host instead of the site's PHP container** (#2649, contributed by @JonPurvis), so a FrankenPHP site's `php artisan` and `composer` could not reach lerd's services, and `.env` now follows runtime switches.
 - **Xdebug failed to load in FrankenPHP containers under the native runtime** (#2646). The shared `99-xdebug.ini` every container mounts was written for the host, loading the native build's `xdebug.so` by path, so each PHP run in a container printed a failed load. The shared ini now stays container-shaped and the host-only lines go into the native override, and an ini written the old way is rewritten, contributed by @JonPurvis.
 - **`php artisan schema:dump` failed on PostgreSQL projects** (#2642). The PHP image carried a MySQL client but no `pg_dump`, so a framework command dumping a Postgres schema could not find it. The image now ships the newest PostgreSQL client its Alpine base offers, 18 on PHP 8.2 to 8.5.
 - **The site wizard offered PHP versions the native runtime cannot serve** (#2639). Under the native runtime the wizard listed every PHP version with a container unit, so with only native 8.5 installed it could pick 8.6 for a project requiring `^8.3` and setup then failed. The wizard, and the version the php shim resolves from composer.json, now offer only what the active runtime can serve, contributed by @JonPurvis.
