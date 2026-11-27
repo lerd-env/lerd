@@ -136,10 +136,9 @@ func registeredSitePaths() []string {
 	return paths
 }
 
-// CheckSiteDir refuses a directory lerd must never delete: anything not inside a
-// folder its containers mount, one of those folders, lerd's own files, or a
-// folder holding another linked site.
-// It returns where the path really leads, which is what may then be deleted.
+// CheckSiteDir refuses a directory lerd must never delete (outside every mount, a
+// mount itself, lerd's files, or holding another site) and returns where the
+// path really leads, which is what may then be deleted.
 func CheckSiteDir(path string, parkedDirs, sitePaths []string) (string, error) {
 	roots := []string{}
 	if home, err := os.UserHomeDir(); err == nil {
