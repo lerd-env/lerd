@@ -308,8 +308,8 @@ service_status_within() {
 	echo "$1 still not $2 after $3s"
 	return 1
 }
-# A container stopped or started behind lerd's back reaches the API from
-# podman's event stream, not the minute-long poll it used to wait for.
+# A container stopped or started behind lerd's back reaches the API in seconds
+# from podman's event stream, or within the idle poll where the stream is down.
 external_stop_shows() {
 	local was_up=1 rc
 	if ! service_status_within mailpit active 1 >/dev/null; then
@@ -317,11 +317,15 @@ external_stop_shows() {
 		lerd service start mailpit >/dev/null 2>&1
 		service_status_within mailpit active 60 || return 1
 	fi
+	# Without the stream (journald on WSL cannot follow) the idle poll is a minute.
+	local deadline=75
+	ps -o args= --ppid "$(systemctl --user show -p MainPID --value lerd-ui)" | grep -q 'podman events' && deadline=15
+	echo "events stream $([ "$deadline" = 15 ] && echo up || echo down), deadline ${deadline}s"
 	systemctl --user stop lerd-mailpit
-	service_status_within mailpit inactive 15
+	service_status_within mailpit inactive "$deadline"
 	rc=$?
 	systemctl --user start lerd-mailpit
-	service_status_within mailpit active 15 || rc=1
+	service_status_within mailpit active "$deadline" || rc=1
 	[ "$was_up" = 1 ] || lerd service stop mailpit >/dev/null 2>&1
 	return $rc
 }
