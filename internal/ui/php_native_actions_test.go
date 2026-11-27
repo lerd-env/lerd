@@ -1,17 +1,21 @@
 package ui
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/tools"
 )
 
 // stubNativeRuntime forces the runtime the PHP actions branch on, so a test can
@@ -207,13 +211,54 @@ func TestFullyInstalledFollowsTheNativeBuilds(t *testing.T) {
 	}
 }
 
+// stubNativePins publishes a host build of each version for this platform only.
+func stubNativePins(t *testing.T, versions ...string) {
+	t.Helper()
+	m := &tools.Manifest{Tools: map[string]tools.Tool{}}
+	for _, v := range versions {
+		m.Tools[nativephp.ToolName(v)] = tools.Tool{
+			Version: v + ".0",
+			URL:     "https://example.test/{asset}",
+			Assets:  map[string]string{runtime.GOOS + "/" + runtime.GOARCH: "php.tar.gz"},
+		}
+	}
+	prev := nativePins
+	nativePins = func() *tools.Manifest { return m }
+	t.Cleanup(func() { nativePins = prev })
+}
+
 // Versions below the native minimum have no build, so they are not offered.
 func TestInstallableUnderNativeSkipsUnsupportedVersions(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	stubNativeRuntime(t, true)
+	stubNativePins(t, "7.4", "8.4")
 	rec := httptest.NewRecorder()
 	handlePHPInstallable(rec, httptest.NewRequest(http.MethodGet, "/api/php-installable", nil))
 	if body := rec.Body.String(); strings.Contains(body, `"7.4"`) || !strings.Contains(body, `"8.4"`) {
 		t.Errorf("installable = %s, want 8.4 offered and 7.4 left out", body)
+	}
+}
+
+// A supported version lerd publishes no host build of for this platform can only
+// fail to install, so it is not offered either.
+func TestInstallableUnderNativeSkipsVersionsWithNoBuild(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubNativeRuntime(t, true)
+	stubNativePins(t, "8.4", "8.5")
+	m := nativePins()
+	other := "linux/amd64"
+	if runtime.GOOS+"/"+runtime.GOARCH == other {
+		other = "darwin/arm64"
+	}
+	m.Tools[nativephp.ToolName("8.6")] = tools.Tool{Version: "8.6.0", URL: "https://example.test/{asset}", Assets: map[string]string{other: "php.tar.gz"}}
+
+	rec := httptest.NewRecorder()
+	handlePHPInstallable(rec, httptest.NewRequest(http.MethodGet, "/api/php-installable", nil))
+	var got []string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"8.4", "8.5"}) {
+		t.Errorf("installable = %v, want [8.4 8.5]", got)
 	}
 }

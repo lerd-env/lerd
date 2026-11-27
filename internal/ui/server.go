@@ -5280,13 +5280,17 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePHPInstallable answers GET /api/php-installable with the supported PHP
-// versions (7.4 .. 8.5) minus the ones already installed, so the UI can offer
-// them in a dropdown.
+// versions minus the ones already installed, so the UI can offer them in a
+// dropdown.
 func handlePHPInstallable(w http.ResponseWriter, _ *http.Request) {
 	supported := cli.SupportedPHPVersions
-	// The native runtime cannot serve below its minimum, so offering those only leads to a refusal.
+	// The native runtime installs only a published host build at or above its
+	// minimum, so offering anything else only leads to a refusal.
 	if nativeRuntimeActive() {
-		supported = slices.DeleteFunc(slices.Clone(supported), func(v string) bool { return !nativephp.Supported(v) })
+		pins := nativePins()
+		supported = slices.DeleteFunc(slices.Clone(supported), func(v string) bool {
+			return !nativephp.Supported(v) || !nativeBuildPublished(pins, v)
+		})
 	}
 	writeJSON(w, installablePHPVersions(supported, fullyInstalledPHPVersions()))
 }

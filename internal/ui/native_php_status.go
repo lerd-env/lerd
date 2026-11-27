@@ -33,4 +33,11 @@ func nativePHPStatusFor(m *tools.Manifest, version string) (string, bool) {
 }
 
 // nativePins loads the published pins once per status build.
-func nativePins() *tools.Manifest { return tools.Load(context.Background()) }
+var nativePins = func() *tools.Manifest { return tools.Load(context.Background()) }
+
+// nativeBuildPublished reports whether lerd publishes a host build of a version
+// for this platform, which is all the native runtime can install.
+func nativeBuildPublished(m *tools.Manifest, version string) bool {
+	_, err := m.URL(nativephp.ToolName(version), runtime.GOOS, runtime.GOARCH)
+	return err == nil
+}
