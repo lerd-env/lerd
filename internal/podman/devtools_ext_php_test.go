@@ -129,9 +129,10 @@ $db->query('select 3');
 	}
 }
 
-// The CLI exits right after its one request, which would close the socket
-// anyway, so this serves requests from a long-lived php -S instead.
-func TestDevtoolsExt_ClosesConnectionAtRequestEnd(t *testing.T) {
+// The CLI exits right after its one request, so this serves requests from a
+// long-lived php -S instead. On macOS the connection is TCP, and one closed per
+// request left a port in TIME_WAIT each time, so a worker keeps one.
+func TestDevtoolsExt_KeepsConnectionAcrossRequests(t *testing.T) {
 	php, args, dir, sink := devtoolsExtSetup(t, `<?php
 (new PDO('sqlite::memory:'))->query('select 1');
 echo 'ok';
@@ -148,27 +149,29 @@ echo 'ok';
 	}
 	t.Cleanup(func() { _ = srv.Process.Kill(); _ = srv.Wait() })
 
-	var resp *http.Response
-	for i := 0; i < 50; i++ {
-		if resp, err = http.Get("http://" + addr + "/probe.php"); err == nil {
-			break
+	for i := 0; i < 2; i++ {
+		var resp *http.Response
+		for try := 0; try < 50; try++ {
+			if resp, err = http.Get("http://" + addr + "/probe.php"); err == nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
-		time.Sleep(50 * time.Millisecond)
+		if err != nil {
+			t.Fatalf("GET probe %d: %v", i, err)
+		}
+		resp.Body.Close()
 	}
-	if err != nil {
-		t.Fatalf("GET probe: %v", err)
-	}
-	resp.Body.Close()
 
 	lines, conns := sink.result()
 	sink.mu.Lock()
 	ended := sink.ended
 	sink.mu.Unlock()
-	if queryLines(t, lines) != 1 || conns != 1 {
-		t.Fatalf("got %d lines over %d connections, want 1 over 1: %v", len(lines), conns, lines)
+	if queryLines(t, lines) != 2 || conns != 1 {
+		t.Fatalf("got %d lines over %d connections, want 2 over 1: %v", len(lines), conns, lines)
 	}
-	if ended != 1 {
-		t.Errorf("connection still open after the request ended, with php still running")
+	if ended != 0 {
+		t.Errorf("connection closed between requests, with php still running")
 	}
 }
 

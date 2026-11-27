@@ -169,7 +169,7 @@ RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
 # rebuilds the base; TestDevtoolsSourceMarkerInSync keeps the marker honest.
 # No-op at runtime on PHP < 8.0 (no zend_observer); the || true degrades a
 # compile failure to "Debug window unavailable" rather than bricking the image.
-# lerd_devtools-src-sha256: 610659407d21
+# lerd_devtools-src-sha256: ae941f4a6cd6
 COPY internal/podman/devtools /tmp/lerd-devtools
 RUN { cd /tmp/lerd-devtools && phpize && ./configure --enable-lerd-devtools && make -j$(nproc) && make install && docker-php-ext-enable lerd_devtools; } || true; \
     rm -rf /tmp/lerd-devtools /var/cache/apk/*

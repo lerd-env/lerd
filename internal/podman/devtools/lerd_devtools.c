@@ -177,7 +177,7 @@ static void lerd_disconnect(void)
 	}
 }
 
-/* lerd_send writes one NDJSON line on the request's connection, opened on
+/* lerd_send writes one NDJSON line on the worker's connection, opened on
  * first use. A broken write closes it, or the next line would land mid-line,
  * and the event is retried once on a fresh connection. */
 static void lerd_send(const char *line, size_t len)
@@ -1529,7 +1529,6 @@ PHP_RINIT_FUNCTION(lerd_devtools)
 	LERD_G(collector_loaded) = 0;
 	LERD_G(bind_buf_init) = 0;
 	LERD_G(is_test) = 0;
-	lerd_disconnect();
 	/* Reset per request: FPM reuses the worker process across requests with a
 	 * fresh app each time, so the adapter must be re-loaded (and the PDO
 	 * suppression re-armed) on every request, not just the first. */
@@ -1588,7 +1587,8 @@ PHP_RINIT_FUNCTION(lerd_devtools)
 PHP_RSHUTDOWN_FUNCTION(lerd_devtools)
 {
 #ifdef LERD_OBSERVE
-	lerd_disconnect();
+	/* The connection outlives the request: on macOS it is TCP, and one closed
+	 * per request left a port in TIME_WAIT each time. lerd-ui ends idle ones. */
 	if (LERD_G(bind_buf_init)) {
 		zend_hash_destroy(&LERD_G(bind_buf));
 		LERD_G(bind_buf_init) = 0;
