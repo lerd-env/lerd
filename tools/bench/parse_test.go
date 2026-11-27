@@ -182,13 +182,18 @@ func TestRoleOf_nativePHP(t *testing.T) {
 func TestSharersOf(t *testing.T) {
 	sites := "Name  Domain  PHP  Node  TLS  Framework  Status  Path\n" +
 		"bench-laravel  bench-laravel.test  8.4  22  No  Laravel 13  running  /h/Lerd/bench-laravel\n" +
+		"bench-fixture  bench-fixture.test  8.4  22  No    running  /h/Lerd/bench-fixture\n" +
 		"shop  shop.test  8.4  22  Yes  Laravel 12  running  /h/shop\n" +
 		"blog  blog.test  8.5  22  No  Laravel 12  running  /h/blog\n" +
 		"↳ alias  crisu.test\n"
-	if got := sharersOf(sites, "8.4", "bench-laravel"); len(got) != 1 || got[0] != "shop" {
+	// The run's own fixtures are not other sites, whichever PHP they landed on.
+	if got := sharersOf(sites, "8.4"); len(got) != 1 || got[0] != "shop" {
 		t.Errorf("sharersOf = %v; want [shop]", got)
 	}
-	if got := sharersOf(sites, "8.3", "bench-laravel"); len(got) != 0 {
+	if got := userSiteCount(sites); got != 2 {
+		t.Errorf("userSiteCount = %d; want 2, the fixtures and the alias left out", got)
+	}
+	if got := sharersOf(sites, "8.3"); len(got) != 0 {
 		t.Errorf("sharersOf on an unused version = %v; want none", got)
 	}
 }

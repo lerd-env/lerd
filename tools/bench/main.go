@@ -124,7 +124,11 @@ func run(cold, squeezeCPU bool, idle time.Duration, runs int, history string) er
 			return err
 		}
 	}
-	rec.Sites = siteCount() - 1 // the fixture is still linked here
+	sites, err := runCmd("lerd", "sites")
+	if err != nil {
+		return err
+	}
+	rec.Sites = userSiteCount(sites)
 	rec.Containers = int(rec.Metrics["containers.count"])
 
 	prev, err := lastRecord(history, rec.Host)
@@ -383,16 +387,17 @@ func lerdVersion() string {
 	return strings.TrimSpace(strings.TrimPrefix(out, "lerd version "))
 }
 
-// siteCount counts the rows of `lerd sites`, skipping the header and alias lines.
-func siteCount() int {
-	out, err := runCmd("lerd", "sites")
-	if err != nil {
-		return -1
-	}
+// benchFixtures are the sites the bench links itself; they are never the
+// user's, so counts and the shared-PHP check leave them out.
+var benchFixtures = map[string]bool{fixtureName: true, laravelFixture: true}
+
+// userSiteCount counts the user's sites in `lerd sites`, without the header,
+// alias lines or the bench's own fixtures.
+func userSiteCount(sitesOutput string) int {
 	n := 0
-	for i, l := range strings.Split(strings.TrimSpace(out), "\n") {
-		l = strings.TrimSpace(l)
-		if i == 0 || l == "" || strings.HasPrefix(l, "↳") {
+	for i, l := range strings.Split(strings.TrimSpace(sitesOutput), "\n") {
+		f := strings.Fields(l)
+		if i == 0 || len(f) == 0 || strings.HasPrefix(f[0], "↳") || benchFixtures[f[0]] {
 			continue
 		}
 		n++

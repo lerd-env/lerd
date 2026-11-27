@@ -47,7 +47,7 @@ func squeeze(m map[string]float64) error {
 	// The cap lands on the whole container, so every site on it slows too and
 	// their work skews the numbers.
 	sites, _ := runCmd("lerd", "sites")
-	if others := sharersOf(sites, fixturePHP, laravelFixture); len(others) > 0 && !squeezeShared {
+	if others := sharersOf(sites, fixturePHP); len(others) > 0 && !squeezeShared {
 		return fmt.Errorf("PHP %s is shared with %s; their work would skew the squeeze and they would be throttled too. Pass -squeeze-shared to go ahead", fixturePHP, strings.Join(others, ", "))
 	}
 	lim, err := newLimiter(ctrs)
@@ -98,12 +98,12 @@ func squeeze(m map[string]float64) error {
 	return nil
 }
 
-// sharersOf names the other sites `lerd sites` lists on a PHP version.
-func sharersOf(sitesOutput, php, self string) []string {
+// sharersOf names the user's sites `lerd sites` lists on a PHP version.
+func sharersOf(sitesOutput, php string) []string {
 	var out []string
 	for i, l := range strings.Split(sitesOutput, "\n") {
 		f := strings.Fields(l)
-		if i == 0 || len(f) < 3 || strings.HasPrefix(f[0], "↳") || f[0] == self {
+		if i == 0 || len(f) < 3 || strings.HasPrefix(f[0], "↳") || benchFixtures[f[0]] {
 			continue
 		}
 		if f[2] == php {
