@@ -47,7 +47,7 @@ func uninstallPlanFor(force, keepData bool) (uninstallPlan, error) {
 		return uninstallPlan{removeMCP: true, removeMkcertCA: true}, nil
 	}
 	if force {
-		return uninstallPlan{removeData: true, removeMCP: true, removeMkcertCA: true, purgeImages: true, removeDesktopApp: desktopFlatpakInstalled()}, nil
+		return uninstallPlan{removeData: true, removeMCP: true, removeMkcertCA: true, purgeImages: true, removeDesktopApp: desktopAppInstalled()}, nil
 	}
 	if !feedback.Confirm("This will stop all containers and remove lerd. Continue?", false) {
 		return uninstallPlan{}, fmt.Errorf("uninstall aborted")
@@ -57,7 +57,7 @@ func uninstallPlanFor(force, keepData bool) (uninstallPlan, error) {
 		removeMCP:        confirmRemoveMCPIntegration(),
 		removeMkcertCA:   confirmRemoveMkcertCA(),
 		purgeImages:      confirmPurgeLerdImages(),
-		removeDesktopApp: desktopFlatpakInstalled() && confirmRemoveDesktopApp(),
+		removeDesktopApp: desktopAppInstalled() && confirmRemoveDesktopApp(),
 		restoreEnvs:      confirmRestoreEnvs(),
 	}, nil
 }
@@ -158,10 +158,9 @@ func runUninstall(force, keepData bool) error {
 
 	if plan.removeDesktopApp {
 		step("Removing the Lerd desktop app")
-		if err := removeDesktopFlatpak(removeData); err != nil {
+		if err := removeDesktopApp(removeData); err != nil {
 			fmt.Println(feedback.Amber("!"))
 			feedback.Note(err.Error())
-			feedback.Note("remove it with: flatpak uninstall --user " + desktopFlatpakID)
 		} else {
 			ok()
 		}

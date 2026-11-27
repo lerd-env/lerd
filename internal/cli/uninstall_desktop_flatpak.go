@@ -35,7 +35,7 @@ func desktopFlatpakRefs() []string {
 }
 
 func confirmRemoveDesktopApp() bool {
-	return feedback.Confirm("Remove the Lerd desktop app (flatpak "+desktopFlatpakID+")?", true)
+	return feedback.Confirm("Remove the Lerd desktop app?", true)
 }
 
 // removeDesktopFlatpak closes the app first so it is not left running from a
