@@ -75,6 +75,7 @@ func TestStartHostProxy_pointsBucketURLsAtTheTunnel(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Header().Set("Link", "<"+file+">; rel=preload; as=image")
+		w.Header().Set("Location", file)
 		fmt.Fprintf(w, `<img src="%s"><div data-page="{&quot;cover&quot;:&quot;%s&quot;}"></div><img src="%s/other/x.jpg">`,
 			file, escapeSlashes(file), rustfs.URL)
 	}))
@@ -98,6 +99,9 @@ func TestStartHostProxy_pointsBucketURLsAtTheTunnel(t *testing.T) {
 	}
 	if link := resp.Header.Get("Link"); !strings.Contains(link, "<"+shared+">") {
 		t.Errorf("Link = %q, want the tunnel URL", link)
+	}
+	if loc := resp.Header.Get("Location"); loc != shared {
+		t.Errorf("Location = %q, want %q", loc, shared)
 	}
 }
 
@@ -137,6 +141,10 @@ func TestStartHostProxy_servesTheBucketsFiles(t *testing.T) {
 	}
 	if r.Header.Get("Cookie") != "" {
 		t.Error("the visitor's cookies reached RustFS")
+	}
+	// an uploaded HTML or SVG file must not script the shared site
+	if resp.Header.Get("Content-Security-Policy") != "sandbox" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("file headers = %v, want it sandboxed", resp.Header)
 	}
 }
 

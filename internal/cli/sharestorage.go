@@ -85,6 +85,12 @@ func (s *shareStorage) handler() http.Handler {
 			req.Header.Del("Cookie")
 			req.Header.Del("Authorization")
 		},
+		// uploads are untrusted: an HTML or SVG file must not run as the site
+		ModifyResponse: func(resp *http.Response) error {
+			resp.Header.Set("Content-Security-Policy", "sandbox")
+			resp.Header.Set("X-Content-Type-Options", "nosniff")
+			return nil
+		},
 	}
 	if s.origin.Scheme == "https" {
 		// a service domain carries lerd's local certificate

@@ -731,7 +731,7 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool, storag
 		// one to its own client through a header of its own instead.
 		for _, h := range []string{"Location", "Content-Location", "X-Inertia-Location"} {
 			if v := resp.Header.Get(h); v != "" {
-				resp.Header.Set(h, rewriteTunnelURL(v, domain, tunnelHost))
+				resp.Header.Set(h, string(storage.rewrite([]byte(rewriteTunnelURL(v, domain, tunnelHost)), tunnelHost)))
 			}
 		}
 		// Frameworks send asset preloads as Link headers, several URLs per
