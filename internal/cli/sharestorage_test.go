@@ -64,6 +64,45 @@ func TestSiteShareStorage_readsABucketOnTheServiceDomain(t *testing.T) {
 	}
 }
 
+// Store definitions fill the bucket with {{site}}, as do other services' vars.
+func TestSiteShareStorage_readsTheStoreDefinitionsMapping(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	store := filepath.Join(data, "lerd", "frameworks")
+	def := `name: acme
+label: Acme
+public_dir: public
+detect:
+    - file: acme.json
+env:
+    file: .env
+    services:
+        postgres:
+            vars:
+                - DB_DATABASE={{site}}
+        rustfs:
+            vars:
+                - AWS_BUCKET={{site}}
+                - AWS_URL=http://localhost:9000/{{site}}
+`
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "acme.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for name, body := range map[string]string{"acme.json": "{}", ".env": "DB_DATABASE=shop_db\nAWS_BUCKET=shop\nAWS_URL=http://localhost:9000/shop\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s := siteShareStorage(dir); s == nil || s.bucket != "shop" || s.port != "9000" {
+		t.Fatalf("storage = %+v, want the shop bucket on port 9000", s)
+	}
+}
+
 func TestSiteShareStorage_leavesOtherStorageAlone(t *testing.T) {
 	for name, env := range map[string]string{
 		"no s3":          "FILESYSTEM_DISK=local\n",
@@ -72,6 +111,7 @@ func TestSiteShareStorage_leavesOtherStorageAlone(t *testing.T) {
 		"unknown domain": "AWS_BUCKET=shop\nAWS_URL=https://rustfs.test/shop\n",
 		"prefixed path":  "AWS_BUCKET=shop\nAWS_URL=http://localhost:9000/shop/media\n",
 		"no bucket name": "AWS_URL=http://localhost:9000/shop\n",
+		"other loopback": "AWS_BUCKET=shop\nAWS_URL=http://127.0.0.2:9000/shop\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if s := siteShareStorage(siteWithEnv(t, env)); s != nil {

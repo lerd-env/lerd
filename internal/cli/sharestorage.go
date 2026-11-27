@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -28,10 +27,9 @@ type shareStorage struct {
 	domain *regexp.Regexp
 }
 
-// siteShareStorage reads the site's bucket from the env file its framework
-// declares, under the keys the framework's service mapping fills with the
-// bucket and its URL. Nil when the site keeps no files in a bucket, or keeps
-// them somewhere that is not local: a real bucket is reachable from anywhere.
+// siteShareStorage reads the site's bucket from its framework's env file, under
+// the keys a service mapping fills with the bucket and its URL. Nil when the
+// bucket is not local, since a real one is reachable from anywhere.
 func siteShareStorage(sitePath string) *shareStorage {
 	fwName, ok := config.DetectFrameworkForDir(sitePath)
 	if !ok {
@@ -41,17 +39,7 @@ func siteShareStorage(sitePath string) *shareStorage {
 	if !ok {
 		return nil
 	}
-	var bucketKey, urlKey string
-	for _, svc := range fw.Env.Services {
-		for _, kv := range svc.Vars {
-			switch key, tmpl, _ := strings.Cut(kv, "="); {
-			case tmpl == "{{bucket}}":
-				bucketKey = key
-			case strings.Contains(tmpl, "://") && strings.HasSuffix(tmpl, "/{{bucket}}"):
-				urlKey = key
-			}
-		}
-	}
+	bucketKey, urlKey := bucketEnvKeys(fw.Env.Services)
 	rel, format := frameworkEnvFile(sitePath)
 	env := envfile.Values(filepath.Join(sitePath, rel), format)
 	bucket := env[bucketKey]
@@ -63,7 +51,8 @@ func siteShareStorage(sitePath string) *shareStorage {
 		return nil // a virtual-host or prefixed layout the prefix doesn't map
 	}
 	s := &shareStorage{bucket: bucket, host: u.Host, port: u.Port()}
-	if ip := net.ParseIP(u.Hostname()); u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback()) {
+	// only the loopback hosts the rewriter matches, or the URLs would stay local
+	if slices.Contains([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname()) {
 		if s.port == "" {
 			return nil
 		}
@@ -80,6 +69,26 @@ func siteShareStorage(sitePath string) *shareStorage {
 	return nil
 }
 
+// bucketEnvKeys finds the service whose vars hold a URL ending in the bucket's
+// placeholder, {{bucket}} or {{site}}, and the var set to that placeholder alone.
+func bucketEnvKeys(services map[string]config.FrameworkServiceDef) (bucketKey, urlKey string) {
+	for _, svc := range services {
+		vars := map[string]string{}
+		for _, kv := range svc.Vars {
+			key, tmpl, _ := strings.Cut(kv, "=")
+			vars[tmpl] = key
+		}
+		for tmpl, key := range vars {
+			for _, ph := range []string{"{{bucket}}", "{{site}}"} {
+				if strings.Contains(tmpl, "://") && strings.HasSuffix(tmpl, "/"+ph) && vars[ph] != "" {
+					return vars[ph], key
+				}
+			}
+		}
+	}
+	return "", ""
+}
+
 // rewrite points the file URLs of the storage's port at the tunnel, through the
 // rewriter the LAN share uses. Presigned URLs keep their query, and the storage
 // still verifies them: the proxy sends the host the signature covers.
@@ -93,10 +102,9 @@ func (s *shareStorage) rewrite(body []byte, tunnelHost string) []byte {
 	return rewriteLoopbackURLs(body, "https://"+tunnelHost, func(port string) bool { return port == s.port })
 }
 
-// withShareStorage serves the files of the site's bucket under the storage
-// port's vitePrefix, read-only, and refuses the rest of the prefix: another
-// port or bucket, a listing (no key), or a path that climbs out of the bucket.
-// Without a local bucket the prefix stays closed, a path of the site like any.
+// withShareStorage serves the bucket's files read-only under the storage port's
+// vitePrefix and refuses the rest of it: another port or bucket, a listing, a
+// climb out of the bucket. Without a local bucket the prefix stays closed.
 func withShareStorage(next http.Handler, s *shareStorage) http.Handler {
 	if s == nil {
 		return next
