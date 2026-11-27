@@ -118,7 +118,7 @@
   "dashboard_health_profiler": "Profiler",
   "dashboard_health_title": "Stan systemu",
   "dashboard_health_watcher": "Monitor plików",
-  "dashboard_hero_allGood": "Wszystko działa płynnie · {sitesRunning}/{sitesTotal} witryn · {servicesActive} aktywnych usług",
+  "dashboard_hero_allGood": "Lerd działa bez zarzutu",
   "dashboard_hero_coreDown": "{components} nie działa",
   "dashboard_hero_coreDownHint": "Usługi podstawowe są wymagane, aby witryny odpowiadały.",
   "dashboard_hero_openSystem": "Otwórz system",

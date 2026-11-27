@@ -94,6 +94,9 @@ three laws in §1. If it's store data, you're editing YAML, not Go.
 New functionality **must** include tests, and behaviour changes must update them.
 A PR without corresponding test coverage will not merge. Write the failing test,
 then make it pass. Keep tests out of `/tmp` — those get wiped; use a repo fixture.
+A behaviour change also updates the release lanes: the matching check in
+`tests/vm/phases/` and its checkbox in `tests/release-test-plan.md`, or the next
+release's lanes fail on it.
 
 ### Step 3 — Implement (DRY, KISS)
 Reuse existing patterns and helpers; do not duplicate. In the web UI, extract

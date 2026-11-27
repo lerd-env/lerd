@@ -277,6 +277,24 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
   return s.fpm_running ? 'green' : 'gray';
 }
 
+// The host-proxy dev server's worker name (config.HostProxyWorkerName), the only
+// request-serving process idle-suspend stops; sleeping workers leave PHP serving.
+const hostProxyWorker = 'app';
+
+// siteBroken flags sites lerd should serve but cannot, excluding paused sites
+// and sleeping host-proxy servers. nginx serves static sites itself; host-proxy
+// servers belong to the user unless lerd runs them.
+export function siteBroken(s: Site): boolean {
+  if (s.paused) return false;
+  if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return false;
+  if (s.container_build_failed) return true;
+  if (s.fpm_running) return false;
+  if (s.host_proxy) return Boolean(s.host_has_dev_server);
+  return Boolean(s.uses_php || s.custom_container);
+}
+
+export const brokenSites = derived(sites, ($s) => $s.filter(siteBroken));
+
 export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
 export interface WorkerDot {

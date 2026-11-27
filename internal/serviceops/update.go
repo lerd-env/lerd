@@ -191,12 +191,10 @@ func UpdateServiceStreaming(name, targetImage string, emit func(PhaseEvent)) err
 		return err
 	}
 
-	unit := "lerd-" + name
-	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
-	if err := restartWithRetry(unit); err != nil {
+	if err := restartUntilReady(name, emit); err != nil {
 		return err
 	}
-	emit(PhaseEvent{Phase: "done", Image: chosenImage, Unit: unit})
+	emit(PhaseEvent{Phase: "done", Image: chosenImage, Unit: "lerd-" + name})
 	// Reclaim exactly the image this update superseded (the old rollback target),
 	// not the whole repo, so a user's own same-repo image is never touched. The
 	// protected set still guards against removing an image another service holds.
@@ -224,6 +222,22 @@ func serviceImageRefs(name string) (current, previous string) {
 		return svc.Image, svc.PreviousImage
 	}
 	return current, previous
+}
+
+// imageRestartFn is restartWithRetry; a seam for tests.
+var imageRestartFn = restartWithRetry
+
+// restartUntilReady restarts a service's unit after its image changed and waits
+// until it accepts connections: systemd reports the unit started well before
+// the engine answers, and a site's next request would fail in between.
+func restartUntilReady(name string, emit func(PhaseEvent)) error {
+	unit := "lerd-" + name
+	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
+	if err := imageRestartFn(unit); err != nil {
+		return err
+	}
+	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
+	return awaitReady(name, unit, 90*time.Second)
 }
 
 // restartWithRetry handles the "unit not found" race after writing a fresh
@@ -473,12 +487,10 @@ func RollbackService(name string, emit func(PhaseEvent)) error {
 	if err := swapImagePin(name, prev, current); err != nil {
 		return err
 	}
-	unit := "lerd-" + name
-	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
-	if err := restartWithRetry(unit); err != nil {
+	if err := restartUntilReady(name, emit); err != nil {
 		return err
 	}
-	emit(PhaseEvent{Phase: "done", Image: prev, Unit: unit})
+	emit(PhaseEvent{Phase: "done", Image: prev, Unit: "lerd-" + name})
 	return nil
 }
 

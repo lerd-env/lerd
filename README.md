@@ -303,7 +303,7 @@ lerd open           # the site in your browser
 lerd code           # the project in your editor
 ```
 
-Starting from nothing, `lerd new` asks which framework and which major from the store, scaffolds it, and links the result, so you land on a served site rather than on three commands to type.
+Starting from nothing, `lerd new` asks which framework and which major from the store, and a starter where that major has some, such as Laravel with Filament or the official React, Vue or Livewire kits. It scaffolds the project and links the result, so you land on a served site rather than on three commands to type.
 
 `lerd install` already starts everything for you on first run, so you can `lerd link` immediately. Day-to-day:
 

@@ -78,8 +78,9 @@ func TestServer_QueueHoldsNoMoreThanItsByteBudget(t *testing.T) {
 	prev := queueBytes
 	queueBytes = 10 << 10
 	t.Cleanup(func() { queueBytes = prev })
+	reached, release := holdWriter(t)
 	s := startServer(t)
-	s.ring.mu.Lock()
+	t.Cleanup(release)
 	big := strings.Repeat("x", 4<<10)
 	var lines strings.Builder
 	for i := range 20 {
@@ -89,11 +90,17 @@ func TestServer_QueueHoldsNoMoreThanItsByteBudget(t *testing.T) {
 		}))
 	}
 	dialAndSend(t, s.Addr(), lines.String())
+	// Only once the writer holds an event has the server certainly taken the
+	// connection; before that, no open connection can also mean not yet accepted.
+	select {
+	case <-reached:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the writer never took an event")
+	}
 	if !waitFor(func() bool { return s.openConns() == 0 }, 2*time.Second) {
-		s.ring.mu.Unlock()
 		t.Fatal("the connection waited")
 	}
-	s.ring.mu.Unlock()
+	release()
 	waitFor(func() bool { return s.Len() > 0 }, 2*time.Second)
 	time.Sleep(100 * time.Millisecond)
 	if n := s.Len(); n == 0 || n > 3 {

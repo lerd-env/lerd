@@ -101,6 +101,18 @@ describe('SitesWidget', () => {
     expect(getByText('1/2 running')).toBeTruthy();
   });
 
+  it('turns the summary pill yellow while a site cannot be served', () => {
+    sites.set([site(), site({ domain: 'blog.test', uses_php: true, fpm_running: false })]);
+    const { getByText } = render(SitesWidget);
+    expect(getByText('1/2 running').className).toContain('bg-yellow-100');
+  });
+
+  it('keeps the summary pill green with a paused site', () => {
+    sites.set([site(), site({ domain: 'blog.test', uses_php: true, fpm_running: false, paused: true })]);
+    const { getByText } = render(SitesWidget);
+    expect(getByText('1/2 running').className).toContain('bg-emerald-100');
+  });
+
   it('hides the link button without local control', () => {
     accessMode.set({ localControl: false, local: false, lanExposed: false, checked: true });
     sites.set([site()]);

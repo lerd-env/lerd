@@ -546,6 +546,10 @@ func (e *EnrichedSite) enrichFPM() {
 		e.FPMRunning, _ = containerRunningFn("lerd-fp-" + e.Name)
 		return
 	}
+	if e.Runtime == "fpm-custom" {
+		e.FPMRunning, _ = containerRunningFn(podman.CustomFPMContainerName(e.Name))
+		return
+	}
 	if e.PHPVersion == "" {
 		return
 	}

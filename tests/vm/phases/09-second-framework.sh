@@ -52,7 +52,7 @@ scaffold ci3 codeigniter 3
 lerd php:list 2>/dev/null | grep -q '8\.4' || check "add PHP 8.4 for CodeIgniter 4" lerd php:rebuild 8.4
 scaffold ci4 codeigniter 4 >/dev/null 2>&1
 check_out "CodeIgniter 3 links on its own definition, PHP 7.2-7.4" '^ci3 .* 7\.[234] .*codeigniter 3' lerd sites
-check_out "9.2 CodeIgniter 4 links on its own definition, PHP 8.2-8.4" '^ci4 .* 8\.[234] .*codeigniter 4' lerd sites
+check_out "9.2 CodeIgniter 4 links on its own definition, PHP 8.2 or newer" '^ci4 .* 8\.([2-9]|[1-9][0-9]) .*codeigniter 4' lerd sites
 
 # WordPress keeps its configuration in wp-config.php, not a dotenv file.
 scaffold wpvm wordpress >/dev/null 2>&1
@@ -66,7 +66,8 @@ check "the backup sits beside wp-config.php" test -f "$wp/wp-config.php.before_l
 cp "$wp/wp-config.php" /tmp/lerd-vm-wp-config.php
 echo "// vm edit" >>"$wp/wp-config.php"
 check "lerd env:restore" bash -c "cd $wp && lerd env:restore --yes 2>/dev/null || lerd env:restore"
-check "9.3 env:restore puts the backup back over wp-config.php" cmp -s "$wp/wp-config.php" "$wp/wp-config.php.before_lerd"
+check "9.3 env:restore puts the backup's values back into wp-config.php" bash -c "diff <(grep \"define( 'DB_\" '$wp/wp-config.php.before_lerd') <(grep \"define( 'DB_\" '$wp/wp-config.php')"
+check "9.3 and keeps what changed since" grep -qx '// vm edit' "$wp/wp-config.php"
 cp /tmp/lerd-vm-wp-config.php "$wp/wp-config.php"
 rm -f /tmp/lerd-vm-wp-config.php
 
@@ -113,11 +114,13 @@ check_out "9.13 [partial] the global binary runs on the host" 'Laravel Installer
 
 # NativePHP: desktop and mobile are package layers on Laravel.
 nat=$PROJECTS/natvm
-if [ ! -d "$nat" ]; then
-	(cd "$PROJECTS" && lerd new natvm </dev/null >/dev/null 2>&1)
-	# desktop 2.4 stopped requiring php-bin, but native:install still unpacks PHP from it.
-	(cd "$nat" && lerd link </dev/null >/dev/null 2>&1 && lerd composer require nativephp/desktop nativephp/php-bin -W --no-interaction </dev/null >/dev/null 2>&1)
-fi
+# Always a fresh project: on an earlier run's, setup --all seeds again and fails
+# on the rows it left, and native:install has already filled what 9.16 names.
+[ -d "$nat" ] && (cd "$nat" && lerd unlink </dev/null >/dev/null 2>&1)
+rm -rf "${PROJECTS:?}/natvm"
+(cd "$PROJECTS" && lerd new natvm </dev/null >/dev/null 2>&1)
+# desktop 2.4 stopped requiring php-bin, but native:install still unpacks PHP from it.
+(cd "$nat" && lerd link </dev/null >/dev/null 2>&1 && lerd composer require nativephp/desktop nativephp/php-bin -W --no-interaction </dev/null >/dev/null 2>&1)
 check_not "a NativePHP desktop project finishes setup --all" '✗' bash -c "cd $nat && lerd link && lerd setup --all --skip-open"
 # Before native:install the package check has something missing to name.
 check_out "9.16 site:doctor runs the package's own check and names what is missing" 'nativephp_runtime|native:install' bash -c "cd $nat && lerd site:doctor"

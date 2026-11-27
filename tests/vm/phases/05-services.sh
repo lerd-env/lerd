@@ -54,7 +54,15 @@ check "5.2 lerd service start mysql comes up" lerd service start mysql
 sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
 check_out "5.3 lerd env wires DB_* from the preset" '^DB_HOST=(lerd-mysql|127\.0\.0\.1)' bash -c 'lerd env >/dev/null 2>&1; grep ^DB_HOST= .env'
 db=$(grep '^DB_DATABASE=' .env | cut -d= -f2)
-check_out "5.4 lerd db:create creates the database and its _testing twin" "${db}_testing" bash -c "lerd db:create '$db' >/dev/null 2>&1; podman exec lerd-mysql mysql -h127.0.0.1 -uroot -plerd -e 'SHOW DATABASES' 2>/dev/null"
+dbs="podman exec lerd-mysql mysql -h127.0.0.1 -uroot -plerd -N -e 'SHOW DATABASES' 2>/dev/null"
+check_out "5.4 lerd db:create creates the database" "^$db\$" bash -c "lerd db:create '$db' >/dev/null 2>&1; $dbs"
+# A fresh Laravel's phpunit.xml runs the tests on in-memory SQLite, so no twin.
+check_not "5.4 and no _testing twin while the tests run on SQLite" "^${db}_testing\$" bash -c "$dbs"
+cp phpunit.xml /tmp/lerd-vm-phpunit.xml
+sed -i '/DB_CONNECTION\|DB_DATABASE/d' phpunit.xml
+check_out "5.4 tests that use the database get the _testing twin" '^vmtwin_testing$' bash -c "lerd db:create vmtwin >/dev/null 2>&1; $dbs"
+podman exec lerd-mysql mysql -h127.0.0.1 -uroot -plerd -e 'DROP DATABASE IF EXISTS vmtwin; DROP DATABASE IF EXISTS vmtwin_testing' >/dev/null 2>&1
+mv /tmp/lerd-vm-phpunit.xml phpunit.xml
 check "5.5 migrations run against the service" lerd artisan migrate --force
 mkdir -p routes && grep -q vm-dbcheck routes/web.php || echo "Route::get('/vm-dbcheck', fn () => DB::table('migrations')->count());" >>routes/web.php
 check_out "5.6 a route that hits the database answers 200" '^200 [1-9]' bash -c "curl -sk -w '%{http_code} ' -o /tmp/lerd-vm-db '$url/vm-dbcheck'; cat /tmp/lerd-vm-db"
@@ -147,8 +155,9 @@ lerd service add --name vmghost --image docker.io/library/nginx:alpine </dev/nul
 lerd service start vmghost </dev/null >/dev/null 2>&1
 wait_for 30 bash -c 'podman ps --format "{{.Names}}" | grep -qx lerd-vmghost'
 rm -f "$HOME/.config/lerd/services/vmghost.yaml"
-# The stats endpoint samples on an interval, so a container just started shows on the next sample.
-wait_for 20 bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"'"
+# The stats endpoint samples on an interval, so wait for a sample taken after the
+# definition was removed, not merely one that lists the container.
+wait_for 20 bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"[^}]*\"orphaned\":true'"
 check_out "an orphaned service container shows and its trash action removes it" 'orphan=true.*gone' bash -c "curl -s http://127.0.0.1:7073/api/stats | grep -q '\"lerd-vmghost\"[^}]*\"orphaned\":true' && echo orphan=true; curl -s -X POST -H 'X-Lerd-CSRF: 1' http://127.0.0.1:7073/api/services/vmghost/remove >/dev/null; test -e ~/.config/containers/systemd/lerd-vmghost.container || echo gone"
 lerd service start mailpit </dev/null >/dev/null 2>&1
 

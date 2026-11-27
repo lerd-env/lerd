@@ -533,7 +533,8 @@ Add, use, and remove at least one database and one non-database service.
 - [ ] `lerd service preset` lists presets, `lerd service search redis` filters
 - [ ] `lerd service start mysql` auto-installs on first use and comes up
 - [ ] `lerd env` wires `DB_*` into the site `.env` from the preset
-- [ ] `lerd db:create demo` creates `demo` and `demo_testing`
+- [ ] `lerd db:create demo` creates `demo`, and `demo_testing` only when the
+      project's tests use that database rather than SQLite
 - [ ] Migrations run against the service (`lerd artisan migrate`)
 - [ ] **https → 200 on a route that hits the database**
 - [ ] `lerd service start redis`, env wiring lands, cache/queue driver works
@@ -876,7 +877,8 @@ cd shop && lerd setup --all --skip-open
       its definition declares, rather than one file claiming the name
 - [ ] On a framework whose configuration is not a dotenv file (CakePHP,
       WordPress, Magento), the backup sits beside the file lerd edits and
-      `lerd env:restore` puts it back over that file
+      `lerd env:restore` puts the old values back into that file and keeps
+      what changed since
 - [ ] A Drupal scaffold offers the framework's own installer ticked in setup,
       it runs and installs the site, and the step is hidden once installed,
       **200**
@@ -1485,6 +1487,8 @@ compiler skips Rails. The lane needs at least one guest with all four.
 - [ ] `lerd restart` and a re-link keep the moved port
 - [ ] The committed `.lerd.yaml` is never rewritten by a move
 - [ ] The declared port comes back on a restart once it is free
+- [ ] A dev server stopped a second after it starts stops within seconds, not
+      systemd's default 90
 - [ ] A sleeping site whose port was taken meanwhile wakes on another
 - [ ] `lerd start` moves a site whose port is taken
 - [ ] A port edited in `.lerd.yaml` reaches nginx and the server on `lerd link`
