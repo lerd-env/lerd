@@ -350,3 +350,29 @@ else
 	trust_ca_site fedora registry.fedoraproject.org/fedora:43 curl -fsS -o /dev/null
 	[ "$scheme" = https ] || lerd unsecure "$name" </dev/null
 fi
+
+# Deleting a site's folder on unlink, on parked folders of its own so neither
+# a refusal nor the delete can reach the demo site.
+mkdeletable() { mkdir -p "$1/public" && echo '{}' >"$1/composer.json" && echo "<?php echo 'ok';" >"$1/public/index.php"; }
+delpark=$HOME/DeleteVM
+mkdeletable "$delpark/gone"
+lerd park "$delpark" </dev/null >/dev/null 2>&1
+gone=$(site_name "$delpark/gone")
+check "the parked site to delete is linked" wait_for 90 bash -c "lerd sites | grep -q '^$gone[[:space:]]'"
+check_out "8.29 unlink --delete-files with no terminal asks for --yes" 'pass --yes' lerd unlink "$gone" --delete-files
+check "8.29 the site stays linked with its folder on disk" bash -c "lerd sites | grep -q '^$gone[[:space:]]' && test -d '$delpark/gone'"
+check "8.30 unlink --delete-files --yes deletes the folder" bash -c "lerd unlink '$gone' --delete-files --yes && test ! -e '$delpark/gone'"
+check_not "8.30 and drops it from lerd sites" "^$gone[[:space:]]" lerd sites
+
+holder=$HOME/HolderVM
+mkdeletable "$holder"
+mkdir -p "$holder/inner"
+(cd "$holder" && lerd link </dev/null >/dev/null 2>&1)
+lerd park "$holder/inner" </dev/null >/dev/null 2>&1
+held=$(site_name "$holder")
+check_out "8.31 unlink --delete-files refuses a site holding a parked directory" 'holds a folder lerd mounts' lerd unlink "$held" --delete-files --yes
+expect_200 8.31 "$(site_url "$holder")"
+lerd unpark "$holder/inner" </dev/null >/dev/null 2>&1
+lerd unlink "$held" </dev/null >/dev/null 2>&1
+lerd unpark "$delpark" </dev/null >/dev/null 2>&1
+rm -rf "$holder" "$delpark"

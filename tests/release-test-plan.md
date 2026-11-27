@@ -857,6 +857,12 @@ lerd worktree add -b feat-x
 - [ ] With `trust_ca: true` and a re-link a custom container on a Debian, an Alpine and a Fedora
       image reaches another secured site and a public one over HTTPS (skipped on a
       `.localhost` install, which has no HTTPS)
+- [ ] `lerd unlink --delete-files` with no terminal and no `--yes` refuses, and
+      the site stays linked with its folder on disk
+- [ ] `lerd unlink --delete-files --yes` on a parked site deletes its folder and
+      drops it from `lerd sites`
+- [ ] `lerd unlink --delete-files --yes` on a site holding a parked directory
+      refuses before unlinking, and the site still answers **200**
 
 ---
 

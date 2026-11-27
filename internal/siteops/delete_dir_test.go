@@ -232,3 +232,28 @@ func TestReportSiteDirNamesARepositoryGitCannotOpen(t *testing.T) {
 		t.Errorf("unchecked = %v, want the repository git could not open", r.Unchecked)
 	}
 }
+
+// A submodule's history lives in the parent's .git and goes with the folder, so
+// a commit only a submodule branch holds is counted even when the parent is clean.
+func TestReportSiteDirCountsCommitsOnlyASubmoduleHolds(t *testing.T) {
+	project, _, _ := repoWithWorktrees(t)
+	lib := resolvedTempDir(t)
+	gitIn(t, lib, "init", "-q", "-b", "main")
+	gitIn(t, lib, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "lib")
+	gitIn(t, project, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "lib")
+	gitIn(t, project, "commit", "-q", "-m", "add lib")
+	before := ReportSiteDir(project, "shop.test").Unpushed
+
+	sub := filepath.Join(project, "lib")
+	gitIn(t, sub, "checkout", "-q", "-b", "local")
+	gitIn(t, sub, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "only here")
+	gitIn(t, sub, "checkout", "-q", "--detach", "main")
+
+	r := ReportSiteDir(project, "shop.test")
+	if len(r.Uncommitted) != 0 {
+		t.Fatalf("the parent must look clean for this case, uncommitted = %v", r.Uncommitted)
+	}
+	if r.Unpushed != before+1 {
+		t.Errorf("unpushed = %d, want %d plus the commit only the submodule branch holds", r.Unpushed, before)
+	}
+}

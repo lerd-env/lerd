@@ -75,7 +75,32 @@ func ReportSiteDir(path, domain string) SiteDirReport {
 	} else {
 		r.Unpushed, _ = strconv.Atoi(strings.TrimSpace(out))
 	}
+	for _, dir := range checkouts {
+		n, err := submoduleUnpushed(dir)
+		if err != nil {
+			unchecked(dir)
+		}
+		r.Unpushed += n
+	}
 	return r
+}
+
+// submoduleUnpushed counts the commits a checkout's submodules hold that none of
+// their remotes has. Their history lives in the parent's .git, so it goes too.
+func submoduleUnpushed(dir string) (int, error) {
+	out, err := git.Output(dir, "submodule", "foreach", "--quiet", "--recursive", "git rev-list --count --all --not --remotes")
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, field := range strings.Fields(out) {
+		n, err := strconv.Atoi(field)
+		if err != nil {
+			return total, fmt.Errorf("reading a submodule's commits: %q", field)
+		}
+		total += n
+	}
+	return total, nil
 }
 
 // hasOwnWork reports uncommitted work in a checkout, leaving out the worktrees
