@@ -1,10 +1,10 @@
 package siteops
 
 import (
-	"strings"
+	"fmt"
+	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
-	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/php"
 )
 
@@ -21,12 +21,15 @@ func AlignPHPVersion(site *config.Site, dir string) (string, error) {
 	}
 	probe := *site
 	probe.Path = dir
-	constraints := phpConstraintsFor(&probe)
+	constraints := alignConstraintsFor(&probe)
 	current, opts := site.PHPVersion, PHPVersionOpts{}
 	if dir != site.Path {
 		current = config.WorktreePHPVersion(dir, site.PHPVersion)
-		branch, _ := gitpkg.Output(dir, "symbolic-ref", "--short", "HEAD")
-		opts.Branch = strings.TrimSpace(branch)
+		label, err := worktreeLabel(site, dir)
+		if err != nil {
+			return "", err
+		}
+		opts.Branch = label
 	}
 	if php.SatisfiesAll(current, constraints...) {
 		return "", nil
@@ -42,4 +45,19 @@ func AlignPHPVersion(site *config.Site, dir string) (string, error) {
 		return "", err
 	}
 	return best, nil
+}
+
+// worktreeLabel is the sanitized branch label lerd tracks the worktree at dir
+// under, which is what a branch-scoped version switch looks it up by.
+func worktreeLabel(site *config.Site, dir string) (string, error) {
+	worktrees, err := detectWorktreesFn(site.Path, site.PrimaryDomain())
+	if err != nil {
+		return "", fmt.Errorf("detecting worktrees: %w", err)
+	}
+	for _, wt := range worktrees {
+		if filepath.Clean(wt.Path) == filepath.Clean(dir) {
+			return wt.Branch, nil
+		}
+	}
+	return "", fmt.Errorf("no worktree of %s at %s", site.Name, dir)
 }
