@@ -119,6 +119,7 @@ func startTerminal(p *plugins.Plugin, e *plugins.Endpoint, env map[string]string
 	terms.Lock()
 	terms.open[s.id] = s
 	terms.Unlock()
+	sweepOrphanTerminals()
 	go s.pump()
 	return s, nil
 }
@@ -295,6 +296,7 @@ type terminalInfo struct {
 // listTerminals answers which terminals a page on this site can go back to,
 // oldest first.
 func listTerminals(plugin, path, site, branch string) []terminalInfo {
+	endOrphanTerminals()
 	terms.Lock()
 	defer terms.Unlock()
 	out := []terminalInfo{}
@@ -306,6 +308,45 @@ func listTerminals(plugin, path, site, branch string) []terminalInfo {
 	slices.SortFunc(out, func(a, b terminalInfo) int { return a.Started.Compare(b.Started) })
 	return out
 }
+
+// endOrphanTerminals ends the terminals whose plugin was removed or revoked,
+// or no longer declares the endpoint as a terminal.
+func endOrphanTerminals() {
+	terms.Lock()
+	all := make([]*termSession, 0, len(terms.open))
+	for _, s := range terms.open {
+		all = append(all, s)
+	}
+	terms.Unlock()
+	for _, s := range all {
+		if !stillATerminal(s.plugin, s.path) {
+			s.end()
+		}
+	}
+}
+
+func stillATerminal(plugin, path string) bool {
+	p, err := plugins.Find(plugin)
+	if err != nil {
+		return false
+	}
+	for _, e := range p.API {
+		if e.Path == path {
+			return e.PTY
+		}
+	}
+	return false
+}
+
+// sweepOrphanTerminals checks every half minute, as lerd-ui hears of no removal
+// or revocation by another process; started with the first terminal.
+var sweepOrphanTerminals = sync.OnceFunc(func() {
+	go func() {
+		for range time.Tick(30 * time.Second) {
+			endOrphanTerminals()
+		}
+	}()
+})
 
 func findTerminal(id, plugin, path, site, branch string) *termSession {
 	terms.Lock()

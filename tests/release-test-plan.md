@@ -1435,8 +1435,8 @@ prove what it draws through the API it reads.
       `LERD_SCHEDULE` set and its output in `schedule.log`; `off` stops it, and
       removing the plugin forgets the answer
 - [ ] A plugin's `pty: true` endpoint opens as a websocket: keystrokes reach
-      its shell in the site's folder, with no dashboard open closing the socket
-      stops the shell, and a plain GET lists the site's terminals
+      its shell in the site's folder, closing the terminal stops the shell, and
+      a plain GET lists the site's terminals
 
 ## Phase 16 — two users on one machine (Linux)
 

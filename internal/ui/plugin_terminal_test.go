@@ -428,6 +428,28 @@ func TestPluginTerminal_ASilentPageIsLetGo(t *testing.T) {
 	waitGone(t, pidOf(t, data), "after its page stopped answering pings")
 }
 
+// A terminal belongs to its plugin: one the user kept ends once the plugin is
+// removed, or revoked, rather than running on until the dashboard closes.
+func TestPluginTerminal_EndsWhenItsPluginGoes(t *testing.T) {
+	data := installTerminalPlugin(t)
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	_, c := dialTerminal(t, srv, "/api/plugins/shell/term", "")
+	c.send(0x2, "hi\r")
+	c.waitFor("got:hi")
+	pid := pidOf(t, data)
+	c.conn.Close()
+	if err := os.RemoveAll(filepath.Join(plugins.Dir(), "shell")); err != nil {
+		t.Fatal(err)
+	}
+	if left := listTerminals("shell", "term", "", ""); len(left) != 0 {
+		t.Errorf("a removed plugin's terminal is still listed: %+v", left)
+	}
+	waitGone(t, pid, "after its plugin was removed")
+}
+
 func TestPluginTerminal_Refusals(t *testing.T) {
 	installTerminalPlugin(t)
 	withDashboard(t)
