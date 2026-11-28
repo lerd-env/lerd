@@ -80,7 +80,12 @@ export function openPluginTerminal(
   // A resize or a keystroke can come before the socket is open.
   const queued: (string | Uint8Array)[] = [];
   const send = (d: string | Uint8Array) => (ws.readyState === Socket.OPEN ? ws.send(d) : queued.push(d));
-  ws.onopen = () => queued.splice(0).forEach((d) => ws.send(d));
+  // Closed before the socket opened: the close still has to reach lerd.
+  let ending = false;
+  ws.onopen = () => {
+    queued.splice(0).forEach((d) => ws.send(d));
+    if (ending) leave();
+  };
   ws.onmessage = (m) => {
     if (typeof m.data !== 'string') return port1.postMessage(m.data);
     try {
@@ -99,7 +104,8 @@ export function openPluginTerminal(
     else if (d?.type === 'resize') send(JSON.stringify({ type: 'resize', cols: d.cols, rows: d.rows }));
     else if (d?.type === 'close') {
       send(JSON.stringify({ type: 'close' }));
-      leave();
+      if (ws.readyState === Socket.OPEN) leave();
+      else ending = true;
     }
   };
   frame.postMessage({ type: 'lerd:terminal:opened', id: msg.id }, '*', [port2]);

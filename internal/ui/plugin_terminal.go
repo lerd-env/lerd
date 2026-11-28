@@ -28,6 +28,9 @@ const termScrollback = 256 << 10
 // reload, which drops and reopens its socket, does not end them.
 var termGrace = 10 * time.Second
 
+// termPing is how often an attached page is asked whether it is still there.
+var termPing = 25 * time.Second
+
 // termSession is one plugin terminal. It outlives the page that opened it once
 // the user has typed into it, until it exits, the page closes it, or the last
 // dashboard window goes away.
@@ -40,6 +43,7 @@ type termSession struct {
 	mu      sync.Mutex
 	conn    *wsConn
 	touched bool
+	over    bool
 	scroll  []byte
 	ended   sync.Once
 }
@@ -84,7 +88,9 @@ func runPluginTerminal(w http.ResponseWriter, r *http.Request, p *plugins.Plugin
 	} else {
 		_ = pty.Setsize(s.tty, termSize(q))
 	}
-	s.attach(conn)
+	if !s.attach(conn) {
+		return
+	}
 	if s.serve(conn) {
 		s.end()
 		return
@@ -138,10 +144,16 @@ func (s *termSession) pump() {
 }
 
 // attach makes conn the page showing the session, replacing any other, and
-// shows it what the terminal printed so far.
-func (s *termSession) attach(conn *wsConn) {
+// shows it what the terminal printed so far. A session that already ended, as
+// a quick run file can before the page attaches, shows that and closes.
+func (s *termSession) attach(conn *wsConn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.over {
+		_ = conn.WriteBinary(s.scroll)
+		_ = conn.WriteClose()
+		return false
+	}
 	if s.conn != nil {
 		_ = s.conn.WriteClose()
 		s.conn.Close()
@@ -152,12 +164,32 @@ func (s *termSession) attach(conn *wsConn) {
 	if len(s.scroll) > 0 {
 		_ = conn.WriteBinary(s.scroll)
 	}
+	return true
 }
 
 // serve types conn's input into the terminal until the socket goes away, and
 // reports whether the page asked to end it.
 func (s *termSession) serve(conn *wsConn) (closed bool) {
+	// A page whose network went away never closes its socket, so it is pinged,
+	// and one that stops answering is let go like any page that left.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		tick := time.NewTicker(termPing)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				s.mu.Lock()
+				_ = conn.WritePing(nil)
+				s.mu.Unlock()
+			}
+		}
+	}()
 	for {
+		_ = conn.SetReadDeadline(time.Now().Add(3 * termPing))
 		op, payload, err := conn.ReadFrame()
 		if err != nil {
 			return false
@@ -219,6 +251,7 @@ func (s *termSession) end() {
 		delete(terms.open, s.id)
 		terms.Unlock()
 		s.mu.Lock()
+		s.over = true
 		if s.conn != nil {
 			_ = s.conn.WriteClose()
 			s.conn.Close()
@@ -231,21 +264,23 @@ func (s *termSession) end() {
 }
 
 // hangUp ends a terminal's process group the way closing a terminal window
-// does, and kills it if that is not enough. pty.Start made the run file a
-// session leader, so its pid names the group holding everything it started.
+// does, then kills whatever in the group outlived the hang-up. pty.Start made
+// the run file a session leader, so its pid names the group it started.
 func hangUp(cmd *exec.Cmd) {
+	group := -cmd.Process.Pid
 	exited := make(chan struct{})
 	go func() {
 		_ = cmd.Wait()
 		close(exited)
 	}()
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGHUP)
-	select {
-	case <-exited:
-	case <-time.After(2 * time.Second):
-		plugins.KillProcessGroup(cmd)
-		<-exited
+	_ = syscall.Kill(group, syscall.SIGHUP)
+	for deadline := time.Now().Add(2 * time.Second); syscall.Kill(group, 0) == nil; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(group, syscall.SIGKILL)
+			break
+		}
 	}
+	<-exited
 }
 
 type terminalInfo struct {
@@ -279,8 +314,8 @@ func findTerminal(id, plugin, path, site, branch string) *termSession {
 }
 
 // dashboardOpened and dashboardClosed count the dashboard windows open. When
-// the last one has been gone for termGrace, every terminal not being shown
-// ends with it.
+// the last one has been gone for termGrace every terminal ends: one still
+// attached lives in a window that is gone, or a socket nobody answers.
 func dashboardOpened() {
 	terms.Lock()
 	defer terms.Unlock()
@@ -297,28 +332,23 @@ func dashboardClosed() {
 	if terms.dashboards--; terms.dashboards > 0 {
 		return
 	}
-	terms.gone = time.AfterFunc(termGrace, endDetachedTerminals)
+	terms.gone = time.AfterFunc(termGrace, endAllTerminals)
 }
 
-func endDetachedTerminals() {
+func endAllTerminals() {
 	terms.Lock()
 	terms.gone = nil
 	if terms.dashboards > 0 {
 		terms.Unlock()
 		return
 	}
-	var idle []*termSession
+	all := make([]*termSession, 0, len(terms.open))
 	for _, s := range terms.open {
-		idle = append(idle, s)
+		all = append(all, s)
 	}
 	terms.Unlock()
-	for _, s := range idle {
-		s.mu.Lock()
-		shown := s.conn != nil
-		s.mu.Unlock()
-		if !shown {
-			s.end()
-		}
+	for _, s := range all {
+		s.end()
 	}
 }
 

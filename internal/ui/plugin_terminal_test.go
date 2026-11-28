@@ -28,7 +28,16 @@ func installTerminalPlugin(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := "api_version: 1\nname: shell\napi:\n  - {path: term, run: bin/term, pty: true}\n  - {path: hup, run: bin/hup, pty: true}\n"
+	manifest := "api_version: 1\nname: shell\napi:\n  - {path: term, run: bin/term, pty: true}\n  - {path: hup, run: bin/hup, pty: true}\n" +
+		"  - {path: stubborn, run: bin/stubborn, pty: true}\n  - {path: quick, run: bin/quick, pty: true}\n"
+	// stubborn's shell exits on a hang-up but leaves a child that ignores one;
+	// quick is done before a page can attach.
+	stubborn := "#!/bin/sh\ntrap 'exit 0' HUP\nsh -c 'trap \"\" HUP; echo $$ > \"$LERD_PLUGIN_DATA/child\"; while :; do sleep 0.1; done' &\necho ready\nwhile :; do sleep 0.1; done\n"
+	for name, body := range map[string]string{"stubborn": stubborn, "quick": "#!/bin/sh\necho all-done\n"} {
+		if err := os.WriteFile(filepath.Join(dir, "bin", name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// hup stands in for podman exec, which only ends the shell in the
 	// container when it is hung up on, not when it is killed.
 	hup := "#!/bin/sh\ntrap 'echo hung-up > \"$LERD_PLUGIN_DATA/hup\"; exit 0' HUP\necho ready\nwhile :; do sleep 0.1; done\n"
@@ -118,6 +127,33 @@ func (c *termClient) waitFor(want string) {
 			c.seen.Write(payload)
 		default:
 			c.t.Fatalf("waiting for %q, got opcode %#x after %q", want, op, c.seen.String())
+		}
+	}
+}
+
+// readUntilClose reads frames until a close frame, reporting whether one came.
+func (c *termClient) readUntilClose() bool {
+	c.t.Helper()
+	for {
+		hdr := make([]byte, 2)
+		if _, err := io.ReadFull(c.br, hdr); err != nil {
+			return false
+		}
+		n := int(hdr[1] & 0x7f)
+		if n == 126 {
+			ext := make([]byte, 2)
+			_, _ = io.ReadFull(c.br, ext)
+			n = int(binary.BigEndian.Uint16(ext))
+		}
+		payload := make([]byte, n)
+		if _, err := io.ReadFull(c.br, payload); err != nil {
+			return false
+		}
+		switch hdr[0] & 0x0f {
+		case 0x2:
+			c.seen.Write(payload)
+		case 0x8:
+			return true
 		}
 	}
 }
@@ -278,6 +314,118 @@ func TestPluginTerminal_CloseHangsUpBeforeKilling(t *testing.T) {
 			t.Fatal("closing never sent SIGHUP, so a shell behind podman exec would outlive the terminal")
 		}
 	}
+}
+
+func TestPluginTerminal_CloseStopsAChildThatIgnoresTheHangUp(t *testing.T) {
+	data := installTerminalPlugin(t)
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	_, c := dialTerminal(t, srv, "/api/plugins/shell/stubborn", "")
+	c.waitFor("ready")
+	var raw []byte
+	for deadline := time.Now().Add(3 * time.Second); len(raw) == 0; time.Sleep(20 * time.Millisecond) {
+		if raw, _ = os.ReadFile(filepath.Join(data, "child")); time.Now().After(deadline) {
+			t.Fatal("the child never started")
+		}
+	}
+	child, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
+	c.send(0x1, `{"type":"close"}`)
+	for deadline := time.Now().Add(5 * time.Second); syscall.Kill(child, 0) == nil; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("child %d that ignores SIGHUP outlived its closed terminal", child)
+		}
+	}
+}
+
+// A run file can be done before the page attaches; the page still sees what
+// it printed, and that it has ended, rather than a terminal that never answers.
+func TestPluginTerminal_AnEndedTerminalSaysSo(t *testing.T) {
+	installTerminalPlugin(t)
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	for range 5 {
+		_, c := dialTerminal(t, srv, "/api/plugins/shell/quick", "")
+		if !c.readUntilClose() {
+			t.Fatalf("no close frame after a terminal that had ended, read %q", c.seen.String())
+		}
+		if !strings.Contains(c.seen.String(), "all-done") {
+			t.Fatalf("its output was lost, read %q", c.seen.String())
+		}
+	}
+}
+
+// Attaching after the session ended, which a quick run file allows, still
+// shows its output and then closes, instead of leaving the page waiting.
+func TestPluginTerminal_AttachingToAnEndedSessionCloses(t *testing.T) {
+	installTerminalPlugin(t)
+	p, err := plugins.Find("shell")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := startTerminal(p, &p.API[3], map[string]string{}, t.TempDir(), "", "", sizeOf(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(3 * time.Second); findTerminal(s.id, "shell", "quick", "", "") != nil; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the quick terminal never ended")
+		}
+	}
+	server, client := net.Pipe()
+	defer client.Close()
+	c := &termClient{t: t, conn: client, br: bufio.NewReader(client)}
+	go func() {
+		if s.attach(&wsConn{conn: server, br: bufio.NewReader(server)}) {
+			t.Error("attach reported an ended session as open")
+		}
+	}()
+	_ = client.SetDeadline(time.Now().Add(3 * time.Second))
+	if !c.readUntilClose() {
+		t.Fatalf("no close frame, read %q", c.seen.String())
+	}
+	if !strings.Contains(c.seen.String(), "all-done") {
+		t.Errorf("the ended session's output was not shown, read %q", c.seen.String())
+	}
+}
+
+// Every terminal ends with the last dashboard, even one still attached: its
+// socket lives in a dashboard window, so it is dead or about to be.
+func TestPluginTerminal_AttachedTerminalsEndWithTheLastDashboard(t *testing.T) {
+	data := installTerminalPlugin(t)
+	grace := termGrace
+	termGrace = 50 * time.Millisecond
+	t.Cleanup(func() { termGrace = grace })
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	_, c := dialTerminal(t, srv, "/api/plugins/shell/term", "")
+	c.send(0x2, "hi\r")
+	c.waitFor("got:hi")
+	pid := pidOf(t, data)
+	dashboardClosed()
+	waitGone(t, pid, "while attached after the last dashboard closed")
+	dashboardOpened()
+}
+
+// A page whose network dropped never closes its socket; one that stops
+// answering pings is let go like a page that left, so an untouched terminal ends.
+func TestPluginTerminal_ASilentPageIsLetGo(t *testing.T) {
+	data := installTerminalPlugin(t)
+	ping := termPing
+	termPing = 50 * time.Millisecond
+	t.Cleanup(func() { termPing = ping })
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	_, c := dialTerminal(t, srv, "/api/plugins/shell/term", "")
+	c.waitFor("size")
+	waitGone(t, pidOf(t, data), "after its page stopped answering pings")
 }
 
 func TestPluginTerminal_Refusals(t *testing.T) {

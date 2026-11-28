@@ -218,6 +218,21 @@ describe('openPluginTerminal', () => {
     page.close();
   });
 
+  it('still ends a terminal closed while its socket was connecting', async () => {
+    const win = { postMessage: vi.fn() } as unknown as Window & { postMessage: ReturnType<typeof vi.fn> };
+    openPluginTerminal(ask(win, 'shell?session=abc'), 'term', win, asSocket);
+    const ws = FakeSocket.last;
+    const page: MessagePort = win.postMessage.mock.calls[0][2][0];
+    page.postMessage({ type: 'close' });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ws.closed).toBe(false);
+    ws.readyState = 1;
+    ws.onopen?.();
+    expect(ws.sent).toEqual(['{"type":"close"}']);
+    expect(ws.closed).toBe(true);
+    page.close();
+  });
+
   it('refuses a path outside the plugin and opens nothing', () => {
     const win = { postMessage: vi.fn() } as unknown as Window;
     FakeSocket.last = undefined as unknown as FakeSocket;

@@ -72,12 +72,16 @@ window.lerd = (() => {
     // after a moment and the page can hide its button.
     maximize(on) {
       return new Promise((resolve, reject) => {
-        if (maximizing) maximizing.reject(new Error('superseded'));
-        const timer = setTimeout(() => {
-          maximizing = null;
+        if (maximizing) {
+          clearTimeout(maximizing.timer);
+          maximizing.reject(new Error('superseded'));
+        }
+        const mine = { resolve, reject };
+        mine.timer = setTimeout(() => {
+          if (maximizing === mine) maximizing = null;
           reject(new Error('this lerd cannot maximize plugin pages'));
         }, 1500);
-        maximizing = { resolve, reject, timer };
+        maximizing = mine;
         window.parent.postMessage({ type: 'lerd:maximize', on: !!on }, '*');
       });
     },
