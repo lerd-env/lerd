@@ -59,6 +59,8 @@ func TestReadManifest_Refusals(t *testing.T) {
 		{"missing run file", "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/nope}\n", "bin/nope"},
 		{"duplicate command", "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/run}\n  - {name: x, run: bin/run}\n", `"x"`},
 		{"unknown method", "p", "api_version: 1\nname: p\napi:\n  - {path: x, methods: [BREW], run: bin/run}\n", "BREW"},
+		{"terminal with a timeout", "p", "api_version: 1\nname: p\napi:\n  - {path: x, run: bin/run, pty: true, timeout: 5m}\n", "a terminal runs until it is closed"},
+		{"terminal on POST", "p", "api_version: 1\nname: p\napi:\n  - {path: x, methods: [POST], run: bin/run, pty: true}\n", "a terminal is opened with GET"},
 		{"api path escapes", "p", "api_version: 1\nname: p\napi:\n  - {path: ../x, run: bin/run}\n", "../x"},
 		{"ui entry outside ui/", "p", "api_version: 1\nname: p\nui:\n  page: {title: P, entry: bin/run}\n", "bin/run"},
 		{"overview card outside ui/", "p", "api_version: 1\nname: p\nui:\n  overview_card: {title: P, entry: bin/run}\n", "bin/run"},

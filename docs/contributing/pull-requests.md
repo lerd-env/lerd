@@ -51,6 +51,10 @@ If your PR changes anything you can see, in the web UI, the TUI or the tray, add
 
 A CI check fails when a PR touches `internal/ui/web/src/`, `internal/tui/` or `cmd/lerd-tray/` and its description has no image or video. It reruns when you edit the description. A refactor that changes no visible behaviour can carry the `no-ui-change` label to skip it.
 
+## Reviews
+
+Every PR asks the maintainers team for a review through `CODEOWNERS`, and a maintainer's approval is what lets it merge. When a PR is opened, reopened or marked ready for review, a workflow also asks the contributors team to look at it, so contributors hear about new work. Drafts and PRs opened by bots are left alone. A contributor's review is welcome feedback, but it does not replace the maintainer approval.
+
 ## CI checks
 
 Every PR runs the following checks automatically. All must pass before merging.

@@ -949,10 +949,6 @@ Dashboard (drive it in a browser, not with curl):
       a site inside a bigger repository gets no button
 - [ ] With the window unfocused but visible, the pings and pulses stop and CPU
       settles; focusing it brings them back
-- [ ] Left open and idle for a minute, the dashboard does not refresh itself
-      every second and `lerd-ui` stays near idle in `top`
-- [ ] A service stopped or started with `systemctl --user` outside lerd changes
-      on the open dashboard within a few seconds, not after a minute
 - [ ] Worker button labels stay on one line, the header's corner is rounded
       where it meets the content, and a rail launcher's hover is square
 - [ ] The status sits in the header as a pill and turns red naming what is down
@@ -1150,6 +1146,10 @@ Other surfaces:
 - [ ] Restarting lerd-ui keeps a request's debug events (`dumps-buffer.json`,
       mode 600), and removing its route from history drops those events and its
       SPX capture
+- [ ] A service stopped or started with `systemctl --user` outside lerd changes
+      on the open dashboard within a few seconds, not after a minute
+- [ ] Left open and idle for a minute, the dashboard does not refresh itself
+      every second and `lerd-ui` stays near idle in `top`
 - [ ] On a FrankenPHP site, adding a domain, toggling a page plugin and changing
       its PHP version each keep it proxying to its own container, **200**
 
@@ -1441,6 +1441,9 @@ prove what it draws through the API it reads.
       `lerd plugin schedule <name> on`, then runs about once a minute with
       `LERD_SCHEDULE` set and its output in `schedule.log`; `off` stops it, and
       removing the plugin forgets the answer
+- [ ] A plugin's `pty: true` endpoint opens as a websocket: keystrokes reach
+      its shell in the site's folder, closing the terminal stops the shell, and
+      a plain GET lists the site's terminals
 
 ## Phase 16 — two users on one machine (Linux)
 

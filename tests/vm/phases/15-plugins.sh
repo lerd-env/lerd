@@ -14,7 +14,7 @@ CATPORT=18765
 
 # A run left half way leaves plugins, a service and a catalog server behind.
 cleanup() {
-	for p in vmplug vmcopy vmbroken vmsvc vmcat vmnew vmsched; do lerd plugin remove "$p" </dev/null >/dev/null 2>&1; done
+	for p in vmplug vmcopy vmbroken vmsvc vmcat vmnew vmsched vmterm; do lerd plugin remove "$p" </dev/null >/dev/null 2>&1; done
 	lerd service remove vmplugcache </dev/null >/dev/null 2>&1
 	pkill -f "http.server $CATPORT" 2>/dev/null
 }
@@ -206,6 +206,44 @@ lerd plugin remove vmsched </dev/null >/dev/null 2>&1
 check "15.20 [partial] it installs again" lerd plugin install "$W/vmsched"
 check_out "15.20 removing the plugin forgot the answer" 'Waiting for your answer' lerd plugin schedule vmsched
 lerd plugin remove vmsched </dev/null >/dev/null 2>&1
+
+# A terminal endpoint: keystrokes typed over the websocket reach the shell in
+# the site's folder, and closing the terminal stops it.
+write_plugin "$W/vmterm" $'api_version: 1\nname: vmterm\napi:\n  - {path: sh, run: bin/sh, pty: true}\n' \
+	bin/sh $'#!/bin/sh\necho $$ >"$LERD_PLUGIN_DATA/pid"\nexec /bin/sh\n'
+# term_roundtrip <site>: opens the terminal for the site, types a sum and pwd,
+# and prints what came back, as a browser's socket would. The site comes as an
+# argument: check_out's own local name would shadow the script's.
+term_roundtrip() {
+	python3 - "$1" <<'PY'
+import base64, os, socket, sys, time
+s = socket.create_connection(("127.0.0.1", 7073), timeout=10)
+key = base64.b64encode(os.urandom(16)).decode()
+s.sendall(f"GET /api/plugins/vmterm/sh?site={sys.argv[1]}&cols=80&rows=24 HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n".encode())
+head = b""
+while b"\r\n\r\n" not in head:
+    head += s.recv(1)
+if b" 101 " not in head.split(b"\r\n")[0]:
+    sys.exit("handshake: " + head.decode(errors="replace"))
+keys = b"echo sum-$((20+22)); pwd; echo end-$((1+1))\r"
+s.sendall(bytes([0x82, 0x80 | len(keys), 1, 2, 3, 4]) + bytes(b ^ (1, 2, 3, 4)[i % 4] for i, b in enumerate(keys)))
+out, end = b"", time.time() + 10
+while b"end-2" not in out:
+    if time.time() > end:
+        break
+    out += s.recv(65536)
+print(out.decode(errors="replace"))
+bye = b'{"type":"close"}'
+s.sendall(bytes([0x81, 0x80 | len(bye), 1, 2, 3, 4]) + bytes(b ^ (1, 2, 3, 4)[i % 4] for i, b in enumerate(bye)))
+s.close()
+PY
+}
+check "15.21 [partial] a plugin with a terminal installs" lerd plugin install "$W/vmterm"
+check_out "15.21 keystrokes over its websocket reach the shell" 'sum-42' term_roundtrip "$name"
+check_out "15.21 the shell runs in the site's folder" "$SITE_DIR" term_roundtrip "$name"
+check "15.21 closing the terminal stops the shell" wait_for 10 bash -c "! kill -0 \$(cat '$DATA/vmterm/pid') 2>/dev/null"
+check_out "15.21 a plain GET lists the site's terminals, none once closed" '^\[\]$' curl -fsS "$UI/api/plugins/vmterm/sh?site=$name"
+lerd plugin remove vmterm </dev/null >/dev/null 2>&1
 
 check "15.18 [partial] lerd plugin remove takes the plugin away" lerd plugin remove vmplug
 check "15.18 its data folder is kept" test -s "$DATA/vmplug/events.log"

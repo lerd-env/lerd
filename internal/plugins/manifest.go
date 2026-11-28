@@ -122,7 +122,14 @@ type Endpoint struct {
 	LoopbackOnly bool `yaml:"loopback_only,omitempty" json:"loopback_only,omitempty"`
 	// Timeout raises APILimit for this endpoint, up to ten minutes.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	// PTY serves the endpoint as a terminal: a websocket wired to the run
+	// file's pseudo terminal, open until either side closes it.
+	PTY bool `yaml:"pty,omitempty" json:"pty,omitempty"`
 }
+
+// HostOnly reports whether the endpoint stays off remote dashboards and site
+// page scripts. A terminal always does, since it runs anything as the user.
+func (e Endpoint) HostOnly() bool { return e.LoopbackOnly || e.PTY }
 
 type UI struct {
 	Page    *UIPage `yaml:"page,omitempty" json:"page,omitempty"`
@@ -330,6 +337,12 @@ func (p *Plugin) validateAPI() error {
 		}
 		if err := checkLimit(e.Timeout, maxEntryLimit); err != nil {
 			return fmt.Errorf("api path %q: %w", e.Path, err)
+		}
+		if e.PTY && e.Timeout != "" {
+			return fmt.Errorf("api path %q: a terminal runs until it is closed, so it takes no timeout", e.Path)
+		}
+		if e.PTY && slices.ContainsFunc(e.Methods, func(m string) bool { return m != "GET" }) {
+			return fmt.Errorf("api path %q: a terminal is opened with GET only", e.Path)
 		}
 	}
 	return nil
