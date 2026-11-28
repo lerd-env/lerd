@@ -27,7 +27,7 @@ func HostModeBlocker() string {
 		return "nginx is not installed on the host: brew install nginx"
 	}
 	if !portsForwarded() {
-		return "ports 80 and 443 are not forwarded to loopback: run lerd install"
+		return "ports 80 and 443 are not forwarded to loopback: run lerd install in a terminal, it asks for your password to forward them"
 	}
 	// hostForm writes these paths into include and ssl lines unquoted.
 	for _, dir := range []string{config.DataDir(), config.RunDir()} {
@@ -45,6 +45,19 @@ func HostModeBlocker() string {
 		}
 	}
 	return ""
+}
+
+// HeldInContainer is why nginx stays in its container on an install whose
+// native PHP would take it to the host, "" when it runs there or was kept out.
+func HeldInContainer() string {
+	if OnHost() {
+		return ""
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg.NginxRuntimeMode() != config.NginxRuntimeHost {
+		return ""
+	}
+	return HostModeBlocker()
 }
 
 // needsContainerNginx: a FrankenPHP container is published on a loopback port the

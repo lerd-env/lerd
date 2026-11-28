@@ -509,7 +509,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	case storeHost == "":
 		// A store base with no hostname leaves nothing to look up.
 	case webserver.OnHost():
-		warn("internet DNS from containers", "skipped: nginx runs on the host, so there is no nginx container to resolve from")
+		info("internet DNS from containers", "skipped: nginx runs on the host, so there is no nginx container to resolve from")
 	case !podman.ContainerRunningQuiet(podman.WebServerUnit):
 		warn("internet DNS from containers", "skipped — lerd-nginx not running (start lerd first)")
 	case podman.ResolvesFromNginx(storeHost):
@@ -638,6 +638,9 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		if !nginxInstalled {
 			rep.fixLast(autoFix(fixInstall, "", "install the lerd services (lerd install)"))
 		}
+	}
+	if why := webserver.HeldInContainer(); why != "" {
+		info("nginx kept off the host", why)
 	}
 
 	// The native runtime has no images, and the rebuild these findings point at

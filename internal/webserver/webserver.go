@@ -114,6 +114,9 @@ func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, 
 // OnHost reports whether nginx runs on the host rather than in its container.
 func OnHost() bool { return nginx.OnHost() }
 
+// HeldInContainer is why nginx stays in its container when native PHP would move it.
+func HeldInContainer() string { return nginx.HeldInContainer() }
+
 // Place moves nginx's recorded home to where it can run, reporting a move.
 func Place() (bool, error) { return nginx.Place() }
 

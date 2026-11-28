@@ -16,6 +16,10 @@ func stubBrewNginx(t *testing.T, installed, stable string) {
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.SetNginxOnHost(true); err != nil {
+		t.Fatal(err)
+	}
 	prevLook, prevRun := brewLook, brewRun
 	t.Cleanup(func() { brewLook, brewRun = prevLook, prevRun })
 	brewLook = func(name string) (string, bool) { return "/opt/homebrew/bin/" + name, true }
@@ -50,12 +54,11 @@ func TestHostNginxStatus_currentWhenHomebrewAgrees(t *testing.T) {
 	}
 }
 
-// With PHP in containers nginx is the container's, not a tool lerd installed.
+// Until nginx runs on the host a Homebrew nginx is the user's, which lerd
+// does not upgrade, even beside native PHP.
 func TestHostNginxStatus_hiddenWithContainerNginx(t *testing.T) {
 	stubBrewNginx(t, "1.31.10", "1.31.10")
-	cfg, _ := config.LoadGlobal()
-	cfg.PHP.Runtime = config.PHPRuntimeContainer
-	_ = config.SaveGlobal(cfg)
+	_ = config.SetNginxOnHost(false)
 	if _, ok := hostNginxStatus(); ok {
 		t.Error("host nginx listed while nginx runs in its container")
 	}

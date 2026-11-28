@@ -1402,6 +1402,12 @@ skipped rather than quietly passing it.
 - [ ] A hand-edited `_default.conf` naming `/etc/nginx/certs` lets the host's
       nginx start after the move, and is back as written after
       `lerd php:runtime container`
+- [ ] With a custom container site linked, `lerd php:runtime native`, `lerd status`
+      and `lerd doctor` each say why nginx stays in its container, and the host
+      nginx's log has no `worker_connections exceed open file resource limit`
+- [ ] With nginx on the host and `nginx.http_port: 8080`, `lerd lan:unexpose`
+      leaves `lsof -nP -iTCP:8080 -sTCP:LISTEN` on 127.0.0.1 only, and
+      `lerd lan:expose` puts it back on every interface
 
 ## Phase 15 — plugins
 

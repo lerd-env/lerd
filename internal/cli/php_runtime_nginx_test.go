@@ -153,3 +153,26 @@ func TestRegenerateWorktreeVhosts_keepsTheWorktreesPHP(t *testing.T) {
 		t.Errorf("wrote %v, want %s", got, want)
 	}
 }
+
+// The host's nginx binds unforwarded ports by LAN exposure in its configs, so a
+// toggle rewrites and reloads them; container nginx takes it from its quadlet.
+func TestRewriteHostNginxForLAN(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.SaveSites(&config.SiteRegistry{}); err != nil {
+		t.Fatal(err)
+	}
+	prevReload := lanReloadFn
+	t.Cleanup(func() { lanReloadFn = prevReload })
+	for _, onHost := range []bool{true, false} {
+		calls := stubWebServerMove(t, onHost)
+		lanReloadFn = func() error { *calls = append(*calls, "reload"); return nil }
+		if err := rewriteHostNginxForLAN(); err != nil {
+			t.Fatal(err)
+		}
+		want := map[bool]string{true: "configs,reload", false: ""}[onHost]
+		if got := strings.Join(*calls, ","); got != want {
+			t.Errorf("on host %v: %s, want %q", onHost, got, want)
+		}
+	}
+}

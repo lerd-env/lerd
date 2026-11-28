@@ -80,6 +80,9 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 	if plan.FrankenPHPDeclined {
 		r.Line(fmt.Sprintf("FrankenPHP has no PHP %s image; linking as FPM instead", plan.Site.PHPVersion))
 	}
+	if err := webserver.RefuseContainerSite(plan.Site); err != nil {
+		return res, err
+	}
 	if err := offerBetterPHP(plan, p, d, r); err != nil {
 		return res, err
 	}
@@ -101,9 +104,6 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 		}
 	}
 
-	if err := webserver.RefuseContainerSite(plan.Site); err != nil {
-		return res, err
-	}
 	// Carry a re-link's HTTPS over and drop registrations the rename stranded.
 	// Resolve already read the secured half; this is the removal.
 	siteops.CleanupRelink(plan.Dir, plan.Site.Name)

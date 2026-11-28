@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -33,6 +34,14 @@ var (
 		}
 	}
 )
+
+// noteNginxHeld says why nginx stays in its container when native PHP would
+// take it to the host, which nothing else reports.
+func noteNginxHeld() {
+	if why := webserver.HeldInContainer(); why != "" {
+		feedback.Note("nginx stays in its container: " + why)
+	}
+}
 
 // moveWebServer takes nginx along when a runtime switch changes where it runs,
 // reporting it so the caller restarts rather than reloads. Everything else is
@@ -167,6 +176,37 @@ func rewriteUnmovedWorktrees(s config.Site) {
 			feedback.Warn("rewriting the vhost for worktree %s: %v", wt.Domain, err)
 		}
 	}
+}
+
+// lanReloadFn reloads nginx after a LAN toggle, a seam so tests reload nothing.
+// A stopped nginx reads the new configs when it starts.
+var lanReloadFn = func() error {
+	if err := webserver.Reload(); err != nil && !errors.Is(err, webserver.ErrNotRunning) {
+		return err
+	}
+	return nil
+}
+
+// rewriteHostNginxForLAN rewrites the host's nginx configs, whose unforwarded
+// listens follow LAN exposure, and reloads it. Container nginx takes the new
+// bind from its quadlet instead.
+func rewriteHostNginxForLAN() error {
+	if !moveOnHostFn() {
+		return nil
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return fmt.Errorf("reading the sites: %w", err)
+	}
+	for i := range reg.Sites {
+		if switchableToNative(&reg.Sites[i]) {
+			if err := webserver.ApplySite(reg.Sites[i]); err != nil {
+				feedback.Warn("rewriting the vhost for %s: %v", reg.Sites[i].Name, err)
+			}
+		}
+	}
+	followNginxMove(reg.Sites)
+	return lanReloadFn()
 }
 
 // followNginxMove rewrites what install's own site loop leaves behind when it

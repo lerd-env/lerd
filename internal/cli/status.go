@@ -206,6 +206,9 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			"not running",
 			serviceStatusHint(podman.WebServerUnit))
 	}
+	if why := webserver.HeldInContainer(); why != "" {
+		note2("kept off the host", why)
+	}
 
 	// PHP
 	if cfg.PHPRuntimeMode() == config.PHPRuntimeNative {

@@ -585,6 +585,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("placing nginx: %w", err)
 	}
+	if !nginxMoved {
+		noteNginxHeld()
+	}
 	step("Writing nginx configuration")
 	if err := webserver.EnsureConfig(); err != nil {
 		return err

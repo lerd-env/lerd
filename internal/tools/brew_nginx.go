@@ -17,12 +17,11 @@ var (
 	}
 )
 
-// hostNginxStatus is the Homebrew nginx lerd installs when PHP moves to the
-// host and runs nginx on. Homebrew owns its versions, so its pin is the version
+// hostNginxStatus is the Homebrew nginx lerd runs while nginx is on the host,
+// and only then, since before that it may be the user's own. Homebrew owns its versions, so its pin is the version
 // `brew upgrade nginx` would bring, read from brew's local index.
 func hostNginxStatus() (ToolStatus, bool) {
-	cfg, err := config.LoadGlobal()
-	if err != nil || cfg.NginxRuntimeMode() != config.NginxRuntimeHost {
+	if !config.NginxOnHost() {
 		return ToolStatus{}, false
 	}
 	bin, ok := brewLook("nginx")

@@ -2222,8 +2222,9 @@ func EnsureNginxConfig() error {
 		// Behind the port forward nginx's own port is the loopback one, so a
 		// redirect it builds keeps the client's host and port rather than name it.
 		rendered = strings.Replace(rendered, "http {", "http {\n    absolute_redirect off;", 1)
-		// launchd supervises it, so it must not fork away from the process it started.
-		rendered = "daemon off;\n" + rendered
+		// launchd supervises it, so it must not fork away from the process it
+		// started, and starts it with 256 open files, fewer than worker_connections.
+		rendered = "daemon off;\nworker_rlimit_nofile 8192;\n" + rendered
 	}
 	// After the host defaults, so a user's http.d override of one replaces it.
 	rendered = dropOverriddenDefaults(rendered, httpOverrideNames())

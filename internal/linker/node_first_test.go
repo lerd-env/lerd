@@ -27,3 +27,23 @@ func TestApply_installsTheMissingNodeBeforeRegistering(t *testing.T) {
 		t.Errorf("called=%v registeredBefore=%v err=%v registered=%v", called, before, err, registered())
 	}
 }
+
+// A site host nginx cannot reach is refused before Node or an image is fetched for it.
+func TestApply_refusesAContainerSiteBeforeInstallingNode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	if err := config.SetNginxOnHost(true); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	plan := &Plan{Mode: ModeCustomFPM, Dir: dir, Site: config.Site{Name: "api", Path: dir, Domains: []string{"api.test"}, ContainerPort: 3000}}
+	called := false
+	d := Deps{EnsureNode: func(config.Site, Reporter) error { called = true; return nil }}
+	if _, err := Apply(plan, Policy{}, d, nil); err == nil {
+		t.Fatal("Apply linked a container site while nginx runs on the host")
+	}
+	if called {
+		t.Error("Node was installed for a site the link then refused")
+	}
+}

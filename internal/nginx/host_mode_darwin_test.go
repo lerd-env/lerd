@@ -408,3 +408,35 @@ func TestLerdVhost_keepsTheClaimRedirect(t *testing.T) {
 		t.Errorf("lerd vhost rewrites the claim redirect:\n%s", got)
 	}
 }
+
+// Only an install native PHP would take nginx to the host is told why it stays.
+func TestHeldInContainer_NamesTheBlockerOnlyWhenTheHostWasWanted(t *testing.T) {
+	hostModeLegs(t)
+	if why := HeldInContainer(); why != "" {
+		t.Fatalf("on the host, HeldInContainer() = %q", why)
+	}
+	portsForwarded = func() bool { return false }
+	if _, err := Place(); err != nil {
+		t.Fatal(err)
+	}
+	if why := HeldInContainer(); !strings.Contains(why, "in a terminal") {
+		t.Errorf("blocked by the forward, HeldInContainer() = %q", why)
+	}
+	cfg, _ := config.LoadGlobal()
+	cfg.Nginx.Runtime = config.NginxRuntimeContainer
+	_ = config.SaveGlobal(cfg)
+	if why := HeldInContainer(); why != "" {
+		t.Errorf("kept in its container by choice, HeldInContainer() = %q", why)
+	}
+}
+
+// launchd starts its jobs with 256 open files, below worker_connections.
+func TestEnsureNginxConfig_onHostRaisesTheOpenFileLimit(t *testing.T) {
+	hostModeLegs(t)
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	if conf := readConf(t, filepath.Join(config.NginxDir(), "nginx.conf")); !strings.Contains(conf, "worker_rlimit_nofile 8192;") {
+		t.Errorf("host nginx.conf leaves the open file limit at launchd's:\n%s", conf)
+	}
+}

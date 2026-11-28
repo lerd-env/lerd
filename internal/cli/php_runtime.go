@@ -83,6 +83,7 @@ never used the shared FPM container.`,
 			feedback.Begin()
 			if prev == mode {
 				feedback.Line("PHP runtime already " + mode)
+				noteNginxHeld()
 				if removeImages {
 					versions, _ := installedPHPVersionsFn()
 					offerFPMImageRemoval(mode, versions, true)
@@ -213,6 +214,9 @@ func ApplyPHPRuntime(mode string) error {
 	moved, err := webserver.Place()
 	if err != nil {
 		return fmt.Errorf("placing nginx: %w", err)
+	}
+	if !moved {
+		noteNginxHeld()
 	}
 
 	// The xdebug ini belongs to the runtime that wrote it, and only a switch
