@@ -218,6 +218,10 @@ func runPluginEndpoint(w http.ResponseWriter, r *http.Request, p *plugins.Plugin
 			return
 		}
 	}
+	if e.PTY {
+		runPluginTerminal(w, r, p, e, env, dir)
+		return
+	}
 	cmd, err := p.Command(e.Run, plugins.SurfaceAPI, nil, env)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -315,7 +319,7 @@ func withPluginPages(next http.Handler) http.Handler {
 		switch {
 		case e == nil:
 			http.NotFound(w, r)
-		case e.LoopbackOnly || !fromSitePage(r):
+		case e.HostOnly() || !fromSitePage(r):
 			http.Error(w, "Forbidden", http.StatusForbidden)
 		default:
 			runPluginEndpoint(w, r, p, e, site, r.Header.Get("X-Lerd-Branch"))
@@ -691,7 +695,7 @@ func catalogEntries() ([]catalogEntry, error) {
 // plugin declared loopback_only.
 func isLoopbackOnlyPluginPath(path string) bool {
 	_, e := pluginEndpointFor(path)
-	return e != nil && e.LoopbackOnly
+	return e != nil && e.HostOnly()
 }
 
 // hasValidPluginToken reports whether the request carries an installed

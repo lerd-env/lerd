@@ -1,6 +1,6 @@
 <script lang="ts">
   import { apiUrl } from '$lib/api';
-  import { answerPluginRequest, pluginDiffRequest, pluginEditRequest, pluginTheme, type PluginDiff, type PluginEdit } from '$lib/pluginBridge';
+  import { answerPluginRequest, openPluginTerminal, pluginDiffRequest, pluginMaximizeRequest, pluginEditRequest, pluginTheme, type PluginDiff, type PluginEdit } from '$lib/pluginBridge';
   import PluginDiffModal from './PluginDiffModal.svelte';
   import { locale } from '$stores/locale';
 
@@ -17,6 +17,9 @@
   let { plugin, url, title, context = {}, autoHeight = false }: Props = $props();
 
   let frame = $state<HTMLIFrameElement | null>(null);
+  // A page may ask to cover the whole dashboard, a terminal for one; only its
+  // own button brings it back, since Escape belongs to what runs inside.
+  let maximized = $state(false);
   let height = $state(48);
   let diff = $state<PluginDiff | null>(null);
   // The page that asked is kept with the edit, so the answer goes back to it
@@ -31,10 +34,17 @@
     editing = null;
   }
 
+  // Terminals the page opened; none outlives the page that holds its port.
+  let terminals: (() => void)[] = [];
+
   // A new src replaces the page in the frame, which can no longer save.
   $effect(() => {
     void src;
-    return () => answerEdit(null);
+    return () => {
+      maximized = false;
+      answerEdit(null);
+      terminals.splice(0).forEach((close) => close());
+    };
   });
 
   // The page learns the dashboard's language with its context, so it can speak
@@ -66,6 +76,18 @@
         frame?.contentWindow?.postMessage({ type: 'lerd:edit:opened', id: edit.id }, '*');
         return;
       }
+      const max = pluginMaximizeRequest(e, frame?.contentWindow);
+      if (max !== null) {
+        maximized = max;
+        // Answering tells the page this lerd can, and where it ended up.
+        frame?.contentWindow?.postMessage({ type: 'lerd:maximized', on: max }, '*');
+        return;
+      }
+      const terminal = openPluginTerminal(e, plugin, frame?.contentWindow);
+      if (terminal) {
+        terminals.push(terminal);
+        return;
+      }
       void answerPluginRequest(e, plugin, frame?.contentWindow);
     };
     window.addEventListener('message', onMessage);
@@ -91,8 +113,8 @@
     {title}
     sandbox="allow-scripts allow-forms allow-popups allow-modals"
     onload={sendTheme}
-    class="{autoHeight ? 'block' : 'flex-1'} w-full border-0 bg-transparent"
-    style:height={autoHeight ? `${height}px` : undefined}
+    class="{maximized ? 'fixed inset-0 z-40 h-screen bg-white dark:bg-lerd-card' : autoHeight ? 'block' : 'flex-1'} w-full border-0 {maximized ? '' : 'bg-transparent'}"
+    style:height={autoHeight && !maximized ? `${height}px` : undefined}
   ></iframe>
 {/key}
 {#if diff}

@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, wsUrl } from './api';
 
 // A plugin page runs in a sandboxed frame with no origin of its own, so it asks
 // the dashboard to call its endpoints for it (see the skeleton's ui/lerd.js).
@@ -54,6 +54,56 @@ export async function answerPluginRequest(
   } catch (err) {
     reply(502, err instanceof Error ? err.message : String(err));
   }
+}
+
+// openPluginTerminal opens a page's pty endpoint, which a sandboxed frame cannot
+// reach, and hands the page a MessagePort to it (messages in the plugin docs).
+// Returns what the frame calls when its page goes away, or null if not asked.
+export function openPluginTerminal(
+  e: MessageEvent,
+  plugin: string,
+  frame: Window | null | undefined,
+  Socket: typeof WebSocket = WebSocket
+): (() => void) | null {
+  const msg = e.data;
+  if (!frame || e.source !== frame || !msg || msg.type !== 'lerd:terminal' || typeof msg.path !== 'string') return null;
+  const path = pluginApiPath(plugin, msg.path);
+  if (!path) return null;
+
+  const ws = new Socket(wsUrl(path));
+  ws.binaryType = 'arraybuffer';
+  const { port1, port2 } = new MessageChannel();
+  const leave = () => {
+    ws.close();
+    port1.close();
+  };
+  // A resize or a keystroke can come before the socket is open.
+  const queued: (string | Uint8Array)[] = [];
+  const send = (d: string | Uint8Array) => (ws.readyState === Socket.OPEN ? ws.send(d) : queued.push(d));
+  ws.onopen = () => queued.splice(0).forEach((d) => ws.send(d));
+  ws.onmessage = (m) => {
+    if (typeof m.data !== 'string') return port1.postMessage(m.data);
+    try {
+      port1.postMessage(JSON.parse(m.data));
+    } catch {
+      // Not lerd's: nothing else is sent as text.
+    }
+  };
+  ws.onclose = () => {
+    port1.postMessage({ type: 'close' });
+    port1.close();
+  };
+  port1.onmessage = (m) => {
+    const d = m.data;
+    if (typeof d === 'string') send(new TextEncoder().encode(d));
+    else if (d?.type === 'resize') send(JSON.stringify({ type: 'resize', cols: d.cols, rows: d.rows }));
+    else if (d?.type === 'close') {
+      send(JSON.stringify({ type: 'close' }));
+      leave();
+    }
+  };
+  frame.postMessage({ type: 'lerd:terminal:opened', id: msg.id }, '*', [port2]);
+  return leave;
 }
 
 // Two versions of a file a page wants shown in the dashboard's own diff, with
@@ -123,4 +173,12 @@ export function pluginTheme(root: HTMLElement = document.documentElement) {
     if (value) vars[name] = value;
   }
   return { type: 'lerd:theme', dark: root.classList.contains('dark'), vars };
+}
+
+// pluginMaximizeRequest reads a page asking to cover the whole dashboard (true)
+// or go back to its place (false); null when the message is not that.
+export function pluginMaximizeRequest(e: MessageEvent, frame: Window | null | undefined): boolean | null {
+  const msg = e.data;
+  if (!frame || e.source !== frame || msg?.type !== 'lerd:maximize' || typeof msg.on !== 'boolean') return null;
+  return msg.on;
 }

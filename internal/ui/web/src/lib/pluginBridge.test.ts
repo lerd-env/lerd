@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { pluginApiPath, answerPluginRequest, pluginTheme, pluginDiffRequest, pluginEditRequest } from './pluginBridge';
+import { pluginApiPath, answerPluginRequest, pluginTheme, pluginDiffRequest, pluginEditRequest, openPluginTerminal, pluginMaximizeRequest } from './pluginBridge';
 
 describe('pluginApiPath', () => {
   it('keeps a plugin inside its own endpoints', () => {
@@ -144,5 +144,106 @@ describe('pluginEditRequest', () => {
     expect(ask({ type: 'lerd:edit', path: 'a', content: '' })).toBeNull();
     expect(ask({ type: 'lerd:edit', id: 1, path: 'a', content: 7 })).toBeNull();
     expect(ask({ type: 'lerd:edit', id: 1, path: 'a', content: 'x'.repeat(2 * 1024 * 1024 + 1) })).toBeNull();
+  });
+});
+
+describe('openPluginTerminal', () => {
+  class FakeSocket {
+    static last: FakeSocket;
+    static OPEN = 1;
+    readyState = 0;
+    binaryType = '';
+    onopen: (() => void) | null = null;
+    sent: unknown[] = [];
+    closed = false;
+    onmessage: ((e: { data: unknown }) => void) | null = null;
+    onclose: (() => void) | null = null;
+    constructor(public url: string) {
+      FakeSocket.last = this;
+    }
+    send(d: unknown) {
+      this.sent.push(d);
+    }
+    close() {
+      this.closed = true;
+    }
+  }
+  const asSocket = FakeSocket as unknown as typeof WebSocket;
+  const ask = (win: Window, path: string) =>
+    ({ source: win, data: { type: 'lerd:terminal', id: 3, path } }) as unknown as MessageEvent;
+
+  it('opens the socket for its own endpoint and hands the page a port to it', async () => {
+    const win = { postMessage: vi.fn() } as unknown as Window & { postMessage: ReturnType<typeof vi.fn> };
+    const close = openPluginTerminal(ask(win, 'shell?site=shop&cols=90&rows=20'), 'term', win, asSocket);
+    expect(close).toBeTypeOf('function');
+    const ws = FakeSocket.last;
+    expect(ws.url).toMatch(/^ws:\/\/[^/]+\/api\/plugins\/term\/shell\?site=shop&cols=90&rows=20$/);
+    const [msg, , ports] = win.postMessage.mock.calls[0];
+    expect(msg).toEqual({ type: 'lerd:terminal:opened', id: 3 });
+    const page: MessagePort = ports[0];
+
+    const got: unknown[] = [];
+    page.onmessage = (e) => got.push(e.data);
+    page.postMessage('ls\r');
+    page.postMessage({ type: 'resize', cols: 100, rows: 30 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ws.sent).toEqual([]);
+    ws.readyState = 1;
+    ws.onopen?.();
+    ws.onmessage?.({ data: '{"type":"session","id":"abc"}' });
+    ws.onmessage?.({ data: new Uint8Array([104, 105]).buffer });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ws.sent[0]).toEqual(new TextEncoder().encode('ls\r'));
+    expect(ws.sent[1]).toBe('{"type":"resize","cols":100,"rows":30}');
+    expect(got[0]).toEqual({ type: 'session', id: 'abc' });
+    expect(new Uint8Array(got[1] as ArrayBuffer)).toEqual(new Uint8Array([104, 105]));
+
+    // The page going away only lets go: lerd keeps a terminal the user typed in.
+    close!();
+    expect(ws.closed).toBe(true);
+    expect(ws.sent).not.toContain('{"type":"close"}');
+    page.close();
+  });
+
+  it('ends the terminal when the page closes it', async () => {
+    const win = { postMessage: vi.fn() } as unknown as Window & { postMessage: ReturnType<typeof vi.fn> };
+    openPluginTerminal(ask(win, 'shell'), 'term', win, asSocket);
+    const ws = FakeSocket.last;
+    ws.readyState = 1;
+    const page: MessagePort = win.postMessage.mock.calls[0][2][0];
+    page.postMessage({ type: 'close' });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ws.sent).toEqual(['{"type":"close"}']);
+    expect(ws.closed).toBe(true);
+    page.close();
+  });
+
+  it('refuses a path outside the plugin and opens nothing', () => {
+    const win = { postMessage: vi.fn() } as unknown as Window;
+    FakeSocket.last = undefined as unknown as FakeSocket;
+    expect(openPluginTerminal(ask(win, '../sites'), 'term', win, asSocket)).toBeNull();
+    expect(FakeSocket.last).toBeUndefined();
+  });
+
+  it('ignores another window asking', () => {
+    const win = { postMessage: vi.fn() } as unknown as Window;
+    const other = { postMessage: vi.fn() } as unknown as Window;
+    expect(openPluginTerminal(ask(other, 'shell'), 'term', win, asSocket)).toBeNull();
+  });
+});
+
+describe('pluginMaximizeRequest', () => {
+  const win = {} as Window;
+  const msg = (data: unknown, source: Window = win) => ({ source, data }) as unknown as MessageEvent;
+
+  it('reads whether its own page wants the whole page', () => {
+    expect(pluginMaximizeRequest(msg({ type: 'lerd:maximize', on: true }), win)).toBe(true);
+    expect(pluginMaximizeRequest(msg({ type: 'lerd:maximize', on: false }), win)).toBe(false);
+  });
+
+  it('ignores another window and anything else', () => {
+    expect(pluginMaximizeRequest(msg({ type: 'lerd:maximize', on: true }, {} as Window), win)).toBeNull();
+    expect(pluginMaximizeRequest(msg({ type: 'lerd:api', on: true }), win)).toBeNull();
+    expect(pluginMaximizeRequest(msg({ type: 'lerd:maximize', on: 'yes' }), win)).toBeNull();
   });
 });
