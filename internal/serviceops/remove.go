@@ -82,7 +82,7 @@ const defaultResetSnapshotLabel = "pre-remove"
 //
 // Order:
 //  0. (if RemoveData and not SkipSnapshot) snapshot every database on it
-//  1. emit stopping_unit, StopUnit (only if active/activating; abort on error)
+//  1. (if active/activating) emit stopping_unit, StopUnit (abort on error)
 //  2. emit removing_container, RemoveContainer
 //  3. (if RemoveData) emit removing_data, rename-aside ~/.local/share/lerd/data/<name>
 //  4. emit removing_quadlet, RemoveQuadlet, DaemonReload
@@ -142,9 +142,9 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 		}
 	}
 
-	emit(PhaseEvent{Phase: "stopping_unit", Unit: unit})
 	status, _ := removeUnitStatusFn(unit)
 	if status == "active" || status == "activating" {
+		emit(PhaseEvent{Phase: "stopping_unit", Unit: unit})
 		if err := removeStopUnit(unit); err != nil {
 			return fmt.Errorf("stop %s: %w", unit, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -341,6 +342,38 @@ func TestRemoveService_InactiveUnit_SkipsStop(t *testing.T) {
 	}
 	if len(rec.stopped) != 0 {
 		t.Errorf("StopUnit should not be invoked when status=inactive, got %v", rec.stopped)
+	}
+}
+
+// Nothing is stopped for a unit that isn't running, so nothing may say so.
+func TestRemoveService_NoStoppingEventWhenNothingRuns(t *testing.T) {
+	for _, tc := range []struct{ name, status string }{
+		{"inactive", "inactive"},
+		{"external", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_DATA_HOME", tmp)
+			t.Setenv("XDG_CONFIG_HOME", tmp)
+			rec := stubPodmanRemove(t)
+			rec.currentStatus = tc.status
+			name := "redis"
+			if tc.name == "external" {
+				name = "dbngin80"
+				svc := &config.CustomService{Name: name, Family: "mysql", External: &config.ExternalDB{Host: "host.containers.internal", Port: 3306, User: "root"}}
+				if err := config.SaveCustomService(svc); err != nil {
+					t.Fatalf("save external service: %v", err)
+				}
+			}
+
+			var phases []string
+			if err := RemoveService(name, RemoveOptions{}, func(e PhaseEvent) { phases = append(phases, e.Phase) }); err != nil {
+				t.Fatalf("RemoveService: %v", err)
+			}
+			if slices.Contains(phases, "stopping_unit") {
+				t.Errorf("stopping_unit emitted with nothing running: %v", phases)
+			}
+		})
 	}
 }
 
