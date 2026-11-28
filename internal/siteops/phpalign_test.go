@@ -118,3 +118,22 @@ func putSiteFile(t *testing.T, dir, rel, body string) {
 		t.Fatal(err)
 	}
 }
+
+// A custom FPM image runs its own PHP and a paused site keeps its landing page,
+// so neither is moved.
+func TestAlignPHPVersion_leavesCustomFPMAndPausedSitesAlone(t *testing.T) {
+	for name, tweak := range map[string]func(*config.Site){
+		"custom fpm": func(s *config.Site) { s.Runtime = "fpm-custom" },
+		"paused":     func(s *config.Site) { s.Paused = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			site := phpVersionTestSite(t, func(s *config.Site) { s.PHPVersion = "8.3"; tweak(s) })
+			stubPHPVersionDeps(t, "8.5", "")
+			stubInstalled(t, "8.3", "8.5")
+
+			if got, err := AlignPHPVersion(site, site.Path); err != nil || got != "" {
+				t.Fatalf("got %q, %v; want no move", got, err)
+			}
+		})
+	}
+}

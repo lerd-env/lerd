@@ -12,7 +12,8 @@ import (
 // newest installed PHP its code accepts when its current one no longer fits, as
 // after switching branch. It returns the version moved to, or "" when none was needed.
 func AlignPHPVersion(site *config.Site, dir string) (string, error) {
-	if site.IsCustomContainer() || site.IsHostProxy() {
+	// A custom FPM image fixes its own PHP, and a paused site settles it on resume.
+	if site.IsCustomContainer() || site.IsHostProxy() || site.IsCustomFPM() || site.Paused {
 		return "", nil
 	}
 	// A machine-local pin is the user's explicit choice; it is not second-guessed.
