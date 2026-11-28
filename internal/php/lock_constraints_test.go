@@ -20,3 +20,16 @@ func TestLockPHPConstraints_readsEveryPackageOnce(t *testing.T) {
 		t.Errorf("no lock: got %v", got)
 	}
 }
+
+// Excluding one patch leaves the rest of its minor version, which is all an
+// installed major.minor can be judged on.
+func TestSatisfies_aPatchExclusionKeepsItsMinor(t *testing.T) {
+	for _, c := range []string{">=8.3 <8.4 !=8.3.0", "^8.2 !=8.3.1"} {
+		if !Satisfies("8.3", c) {
+			t.Errorf("Satisfies(8.3, %q) = false, want true", c)
+		}
+	}
+	if Satisfies("8.3", "!=8.3") {
+		t.Error(`Satisfies(8.3, "!=8.3") = true, want false`)
+	}
+}
