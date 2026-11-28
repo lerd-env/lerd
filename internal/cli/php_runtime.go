@@ -265,10 +265,9 @@ func ApplyPHPRuntime(mode string) error {
 		startWorkersForSite(s, stopped[s.Name], s.PHPVersion)
 	}
 	regenerateProfilerVhost()
-	// A refused reload leaves nginx serving the runtime it had before, so every
-	// site answers 502 while the switch reports success. One unloadable
-	// certificate anywhere is enough to cause it, so say so rather than
-	// swallowing it. nginx that moved with PHP was started on the new config.
+	// nginx that moved with PHP started on the new config. Otherwise a refused reload
+	// leaves it on the old runtime, every site 502 while the switch reports success,
+	// and one unloadable certificate anywhere causes it, so it is said, not swallowed.
 	if !moveWebServer(wasOnHost, sites.Sites) {
 		if err := webserver.Reload(); err != nil {
 			feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
