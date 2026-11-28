@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // nginxQuadletRestartTimeout bounds the readiness wait after a quadlet-changing
@@ -279,7 +280,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 				// can flash "active" mid-loop, fooling the readiness probe).
 				// Roll back on either; a neighbour's broken vhost on a healthy,
 				// running container is left alone, matching the reload path.
-				if running, _ := podman.ContainerRunning(podman.WebServerUnit); !running || cfgedit.MentionsFile(out, f.Path) {
+				if running := webserver.Running(); !running || cfgedit.MentionsFile(out, f.Path) {
 					restartErr = errors.New("invalid config: " + out)
 				}
 			}

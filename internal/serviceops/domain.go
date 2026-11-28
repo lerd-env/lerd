@@ -26,6 +26,7 @@ var (
 		return certs.IssueCert(domain, []string{domain}, filepath.Join(config.CertsDir(), "sites"))
 	}
 	domainVhostFn       = webserver.ApplyService
+	domainOnHostFn      = webserver.OnHost
 	domainRemoveCertFn  = certs.RemoveSiteCerts
 	domainRemoveVhostFn = webserver.RemoveSite
 	domainWriteHostsFn  = podman.WriteContainerHosts
@@ -200,7 +201,11 @@ func ApplyServiceDomain(service string) error {
 	if err := domainIssueCertFn(domain); err != nil {
 		return fmt.Errorf("issuing certificate for %s: %w", domain, err)
 	}
-	if err := domainVhostFn(domain, "lerd-"+service, port, true, serviceDomainCORS(service)); err != nil {
+	upstream, upstreamPort, err := serviceUpstream(service, port)
+	if err != nil {
+		return err
+	}
+	if err := domainVhostFn(domain, upstream, upstreamPort, true, serviceDomainCORS(service)); err != nil {
 		return fmt.Errorf("writing vhost for %s: %w", domain, err)
 	}
 	if err := domainWriteHostsFn(); err != nil {
@@ -453,4 +458,23 @@ func firstMapping(ports []string) string {
 		return ""
 	}
 	return ports[0]
+}
+
+// serviceUpstream is where a service's domain proxies to: its container on the
+// podman network, or, for an nginx on the host that cannot resolve the
+// container's name, the loopback port the container publishes for that port.
+func serviceUpstream(service string, port int) (string, int, error) {
+	if !domainOnHostFn() {
+		return "lerd-" + service, port, nil
+	}
+	for _, m := range HostPortMappings(service) {
+		parts := strings.Split(m, ":")
+		if len(parts) < 2 || strings.SplitN(parts[len(parts)-1], "/", 2)[0] != strconv.Itoa(port) {
+			continue
+		}
+		if host, err := strconv.Atoi(parts[len(parts)-2]); err == nil {
+			return "127.0.0.1", host, nil
+		}
+	}
+	return "", 0, fmt.Errorf("service %q publishes no host port for %d, which an nginx on the host needs to reach it", service, port)
 }

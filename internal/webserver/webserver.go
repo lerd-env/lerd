@@ -111,6 +111,21 @@ func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, 
 	return nginx.GenerateServiceProxyVhost(domain, upstreamHost, upstreamPort, ssl, cors)
 }
 
+// OnHost reports whether nginx runs on the host rather than in its container.
+func OnHost() bool { return nginx.OnHost() }
+
+// Running reports whether the web server is up, wherever it runs.
+func Running() bool { return nginx.Running() }
+
+// Up is Running for status surfaces that poll, cheap enough to read per snapshot.
+func Up() bool { return nginx.Up() }
+
+// UseServiceManager hands the backend the writer for units it runs outside a
+// container, the host's nginx among them.
+func UseServiceManager(write func(name, content string) (bool, error)) {
+	nginx.WriteServiceUnit = write
+}
+
 // current is nginx until a second backend and the switch to it exist.
 var current Backend = nginxBackend{}
 

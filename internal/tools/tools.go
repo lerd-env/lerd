@@ -567,6 +567,12 @@ func StatusAll(ctx context.Context) []ToolStatus {
 	if s, ok := externalManager(); ok {
 		out = append(out, s)
 	}
+	if s, ok := hostNginxStatus(); ok {
+		out = append(out, s)
+	}
+	if s, ok := podmanStatus(); ok {
+		out = append(out, s)
+	}
 	return out
 }
 

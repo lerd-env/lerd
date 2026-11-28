@@ -636,7 +636,7 @@ func writeSiteConf(name string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, rendered, 0644)
+	return writeConf(confPath, rendered)
 }
 
 // renderFPMVhost renders the vhost for a site served by fastcgi, over HTTP or,
@@ -937,7 +937,7 @@ func writeConfD(domain string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, rendered, 0644)
+	return writeConf(confPath, rendered)
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -1040,7 +1040,7 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 		return err
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
-	return WriteFileAtomic(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
+	return writeConf(filepath.Join(config.NginxConfD(), domain+".conf"), rendered)
 }
 
 // landingVhostConf renders a minimal vhost for site that serves htmlFile (read
@@ -1137,7 +1137,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 	config.GuardRealWrite(confPath)
-	if err := WriteFileAtomic(confPath, []byte(conf), 0644); err != nil {
+	if err := writeConf(confPath, []byte(conf)); err != nil {
 		return err
 	}
 	if site.Secured {
@@ -1210,7 +1210,7 @@ server {
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, []byte(conf), 0644)
+	return writeConf(confPath, []byte(conf))
 }
 
 // RemoveVhost deletes the vhost config files for the given domain.
@@ -1334,8 +1334,17 @@ func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ss
 var ErrNotRunning = errors.New("lerd-nginx is not running")
 
 var (
-	containerRunningFn = podman.ContainerRunningKnown
-	reloadExecFn       = func() error {
+	containerRunningFn = func(unit string) (bool, bool) {
+		if OnHost() {
+			return hostRunning()
+		}
+		return podman.ContainerRunningKnown(unit)
+	}
+	reloadExecFn = func() error {
+		if OnHost() {
+			_, err := hostNginx("-s", "reload")
+			return err
+		}
 		_, err := podman.Run("exec", podman.WebServerUnit, "nginx", "-s", "reload")
 		return err
 	}
@@ -1446,6 +1455,9 @@ func reloadWithRetry(reload func() error, timeout time.Duration) error {
 // returned error wraps context.DeadlineExceeded and the buffer carries
 // whatever podman managed to emit before the deadline fired.
 func Test() (string, error) {
+	if OnHost() {
+		return hostNginx("-t")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := podman.CmdContext(ctx, "exec", podman.WebServerUnit, "nginx", "-t")
@@ -1662,7 +1674,7 @@ func EnsureDefaultVhost() error {
 		return fmt.Errorf("writing error pages: %w", err)
 	}
 
-	canonical := renderDefaultVhost()
+	canonical := asHost(renderDefaultVhost())
 	path := filepath.Join(config.NginxConfD(), "_default.conf")
 	sentinelPath := path + defaultVhostManagedHashSuffix
 
@@ -2074,8 +2086,7 @@ func renderLerdVhost() (string, error) {
 
 func writeLerdVhost(content string) error {
 	path := filepath.Join(config.NginxConfD(), "lerd.localhost.conf")
-	config.GuardRealWrite(path)
-	return os.WriteFile(path, []byte(content), 0644)
+	return writeConf(path, []byte(content))
 }
 
 // SyncLerdVhost rewrites the lerd vhost when what lerd would serve no longer
@@ -2094,7 +2105,7 @@ func SyncLerdVhost() (bool, error) {
 		return false, err
 	}
 	current, err := os.ReadFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
-	if err == nil && string(current) == content {
+	if err == nil && string(current) == string(asHost([]byte(content))) {
 		return false, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
@@ -2163,8 +2174,17 @@ func EnsureNginxConfig() error {
 		return fmt.Errorf("rendering nginx.conf: %w", err)
 	}
 	rendered := dropOverriddenDefaults(buf.String(), httpOverrideNames())
-	config.GuardRealWrite(destPath)
-	return os.WriteFile(destPath, []byte(rendered), 0644)
+	if OnHost() {
+		if err := ensureHostFiles(); err != nil {
+			return err
+		}
+		// Behind the port forward nginx's own port is the loopback one, which
+		// a redirect it builds would otherwise send the browser to.
+		rendered = strings.Replace(rendered, "http {", "http {\n    port_in_redirect off;", 1)
+		// launchd supervises it, so it must not fork away from the process it started.
+		rendered = "daemon off;\n" + rendered
+	}
+	return writeConf(destPath, []byte(rendered))
 }
 
 // forwardedConf declares $real_forwarded_host / $real_forwarded_proto /
@@ -2203,12 +2223,10 @@ func EnsureForwardedConf() error {
 		return err
 	}
 	content := forwardedConf + spxKeyMap(key)
-	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_forwarded.conf"))
-	return os.WriteFile(
-		filepath.Join(config.NginxConfD(), "_forwarded.conf"),
-		[]byte(content),
-		0644,
-	)
+	if OnHost() {
+		content += publicPortMap()
+	}
+	return writeConf(filepath.Join(config.NginxConfD(), "_forwarded.conf"), []byte(content))
 }
 
 // spxKeyMap resolves $spx_key to the SPX http key for direct local requests
@@ -2247,8 +2265,7 @@ func EnsureProfilerVhost() error {
 		state = "on"
 	}
 	content := profilerVhost(cfg.PHPRuntimeMode(), cfg.PHP.DefaultVersion, ProfilerStatePath, state)
-	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
-	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
+	return writeConf(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content))
 }
 
 // ServedProfilerState reports the profiler setting nginx is serving right now,
@@ -2310,6 +2327,9 @@ func EnsureHttpD() error {
 // into the running nginx container — without this heal, the file would be
 // orphaned on disk and silently ignored.
 func RewriteNginxQuadlet() (changed bool, err error) {
+	if OnHost() {
+		return writeHostUnit()
+	}
 	content, err := podman.GetQuadletTemplate("lerd-nginx.container")
 	if err != nil {
 		return false, fmt.Errorf("reading bundled nginx quadlet template: %w", err)

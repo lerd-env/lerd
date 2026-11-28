@@ -1382,6 +1382,9 @@ skipped rather than quietly passing it.
 - [ ] With the debug bridge on, `go run ./tools/bench` finishes all three runs
       on the native runtime with no 502 or 504, and the Mac's TIME_WAIT count
       (`netstat -an -p tcp | grep -c TIME_WAIT`) stays in the hundreds during it
+- [ ] `lerd php:runtime native` prints that nginx moved to the host, `lerd status`
+      shows `nginx (host)`, every site including a paused one answers, and
+      `lerd php:runtime container` brings the nginx container back the same way
 
 ## Phase 15 — plugins
 

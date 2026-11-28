@@ -1,6 +1,6 @@
 # Native runtime
 
-On macOS your project lives on the host and is mounted into the Podman VM, so a containerised PHP crosses that boundary for every file it reads. The native runtime removes the boundary: PHP-FPM, the CLI, composer and the workers all run directly on the host, while nginx and the services stay in containers.
+On macOS your project lives on the host and is mounted into the Podman VM, so a containerised PHP crosses that boundary for every file it reads. The native runtime removes the boundary: PHP-FPM, the CLI, composer and the workers all run directly on the host, and so does nginx, while the services stay in containers.
 
 Measured on an M-series Mac against a Laravel 11 app with Horizon, Filament and Cashier, both runtimes with the framework caches warm:
 
@@ -42,6 +42,14 @@ nginx keeps its connections to a native pool open and reuses them, up to eight i
 FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container. That goes for their commands too. In a FrankenPHP, custom-FPM or PHP-carrying custom container site, `php`, `composer`, `artisan` and the other shims run in the site's own container, where its `.env` hosts resolve, and lerd mounts its composer, composer's home and the project's worktrees checked out beside it into FrankenPHP containers for that. A worktree added after the container started is mounted the first time a command runs in it, which restarts the container once, and a removed one is dropped from the container's definition so its next start doesn't fail on a missing folder. A host-proxy site, a custom container without PHP, and any folder that is not a site keep running PHP on your machine.
 
 Moving one site between the two moves where its PHP runs, whether that is `lerd runtime frankenphp` or `lerd runtime fpm`, the MCP `site_runtime` tool, or lerd dropping a FrankenPHP site back to FPM for a PHP version FrankenPHP has no image for. Each of those reruns `lerd env` and the site's `.env` points at the addresses the new side can reach. A FrankenPHP site in worker mode restarts its container afterwards, since Octane reads `.env` once when it boots.
+
+## nginx on the host
+
+Moving PHP to the host takes nginx with it, so a request no longer crosses the Podman machine twice, in to nginx and back out to PHP-FPM. `lerd php:runtime native` installs Homebrew's nginx when it is missing and runs it under launchd as `lerd-nginx`, on lerd's own config, listening on the loopback ports the port forward relays 80 and 443 to, with the Mac's own paths for certificates and your overrides. Switching back brings the nginx container back the same way. Both directions say which way nginx moved.
+
+nginx stays in its container when Homebrew is not installed, when a site runs in a container of its own (FrankenPHP, a custom container or a custom FPM), or when `config.yaml` sets `nginx.runtime: container`. Service domains proxy to the loopback port each service publishes. Your per-site overrides in `custom.d` are loaded as they are and never rewritten, so one that names a container, such as `proxy_pass http://lerd-redis:6379`, or `host.containers.internal`, needs `127.0.0.1` and the published port on the host instead.
+
+Homebrew's nginx is listed under **System → Tools** with the version Homebrew would upgrade it to, and its update runs `brew upgrade nginx` and restarts lerd's nginx. Podman is listed there too, for its version only.
 
 ## Installing and updating
 

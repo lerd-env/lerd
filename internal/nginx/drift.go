@@ -102,7 +102,7 @@ func renderSiteVhost(site config.Site) (rendered []byte, ok bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return rendered, true, nil
+	return asHost(rendered), true, nil
 }
 
 // sitePHPVersion is the version the vhost's fastcgi upstream is named for,

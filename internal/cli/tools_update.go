@@ -75,6 +75,8 @@ var updateToolFn = updateTool
 // their archive extract; composer is a plain binary swap.
 func updateTool(pins *pinnedTools, name string) error {
 	switch name {
+	case "nginx":
+		return upgradeHostNginx()
 	case "fnm":
 		return installFnm(pins, io.Discard)
 	case "mise":
@@ -96,6 +98,11 @@ func updateTool(pins *pinnedTools, name string) error {
 // The name is checked against the managed set rather than trusted, since it
 // arrives from a request and decides which path gets written.
 func UpdateOneTool(requested string) error {
+	// Homebrew's nginx is listed with lerd's tools but is not one it downloads.
+	if requested == "nginx" {
+		var pins pinnedTools
+		return updateToolFn(&pins, "nginx")
+	}
 	name, ok := tools.Managed(requested)
 	if !ok {
 		return fmt.Errorf("unknown tool %q", requested)

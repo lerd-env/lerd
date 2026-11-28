@@ -171,6 +171,7 @@ func ApplyPHPRuntime(mode string) error {
 				return errors.New(msg)
 			}
 		}
+		ensureHostNginx(os.Stdout)
 		pins := &pinnedTools{}
 		for _, v := range nativeVersionsWanted() {
 			if err := ensureNativePHPInstalled(pins, v, os.Stdout); err != nil {
@@ -204,6 +205,7 @@ func ApplyPHPRuntime(mode string) error {
 		}
 	}
 
+	wasOnHost := webserver.OnHost()
 	cfg.PHP.Runtime = mode
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
@@ -266,9 +268,11 @@ func ApplyPHPRuntime(mode string) error {
 	// A refused reload leaves nginx serving the runtime it had before, so every
 	// site answers 502 while the switch reports success. One unloadable
 	// certificate anywhere is enough to cause it, so say so rather than
-	// swallowing it.
-	if err := webserver.Reload(); err != nil {
-		feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
+	// swallowing it. nginx that moved with PHP was started on the new config.
+	if !moveWebServer(wasOnHost, sites.Sites) {
+		if err := webserver.Reload(); err != nil {
+			feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
+		}
 	}
 
 	// Only now is the old runtime idle. Stopping it before nginx was reloaded

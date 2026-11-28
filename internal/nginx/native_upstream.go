@@ -70,9 +70,9 @@ func ensureNativeUpstreamsFor(rendered []byte) error {
 	}
 	path := filepath.Join(config.NginxConfD(), nativeUpstreamsFile)
 	want := []byte(renderNativeUpstreams())
-	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, want) {
+	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, asHost(want)) {
 		return nil
 	}
 	config.GuardRealWrite(path)
-	return WriteFileAtomic(path, want, 0644)
+	return writeConf(path, want)
 }

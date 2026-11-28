@@ -10,5 +10,8 @@ import (
 // its waking vhost.
 func TestMain(m *testing.M) {
 	siteWaitsOnSleepingService = func(string) bool { return false }
+	// The developer's own Homebrew nginx and port forward would move every native
+	// test to the host; hostModeLegs turns them back on where a test wants it.
+	hostNginxBinary = func() (string, bool) { return "", false }
 	os.Exit(m.Run())
 }

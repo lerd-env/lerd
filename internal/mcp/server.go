@@ -1200,7 +1200,7 @@ func execStatus() (any, *rpcError) {
 	var r result
 	r.DNS.TLD = tld
 	r.DNS.OK, _ = dns.Check(tld)
-	r.Nginx.Running, _ = podman.ContainerRunning(podman.WebServerUnit)
+	r.Nginx.Running = webserver.Running()
 	r.Watcher.Running = exec.Command("systemctl", "--user", "is-active", "--quiet", "lerd-watcher").Run() == nil
 
 	versions, _ := phpDet.ListInstalled()
