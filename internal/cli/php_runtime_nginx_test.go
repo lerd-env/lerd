@@ -13,10 +13,11 @@ import (
 func stubWebServerMove(t *testing.T, nowOnHost bool) *[]string {
 	t.Helper()
 	var calls []string
-	prevOn, prevRest, prevUnit, prevRestart, prevImage := moveOnHostFn, moveRewriteRestFn, moveRewriteUnitFn, moveRestartUnitFn, moveEnsureImageFn
+	prevOn, prevRest, prevUnit, prevRestart, prevImage, prevHosts := moveOnHostFn, moveRewriteRestFn, moveRewriteUnitFn, moveRestartUnitFn, moveEnsureImageFn, moveContainerHostsFn
 	t.Cleanup(func() {
-		moveOnHostFn, moveRewriteRestFn, moveRewriteUnitFn, moveRestartUnitFn, moveEnsureImageFn = prevOn, prevRest, prevUnit, prevRestart, prevImage
+		moveOnHostFn, moveRewriteRestFn, moveRewriteUnitFn, moveRestartUnitFn, moveEnsureImageFn, moveContainerHostsFn = prevOn, prevRest, prevUnit, prevRestart, prevImage, prevHosts
 	})
+	moveContainerHostsFn = func() error { calls = append(calls, "hosts"); return nil }
 	moveOnHostFn = func() bool { return nowOnHost }
 	moveRewriteRestFn = func([]config.Site) { calls = append(calls, "configs") }
 	moveRewriteUnitFn = func() (bool, error) { calls = append(calls, "unit"); return true, nil }
@@ -32,8 +33,8 @@ func TestMoveWebServer_followsPHPToTheHost(t *testing.T) {
 	if !moveWebServer(true, nil) {
 		t.Fatal("nginx did not move with PHP")
 	}
-	if got := strings.Join(*calls, ","); got != "configs,unit,restart" {
-		t.Errorf("move = %s, want configs,unit,restart", got)
+	if got := strings.Join(*calls, ","); got != "configs,unit,restart,hosts" {
+		t.Errorf("move = %s, want configs,unit,restart,hosts", got)
 	}
 }
 
@@ -44,8 +45,8 @@ func TestMoveWebServer_bringsTheContainerBack(t *testing.T) {
 	if !moveWebServer(true, nil) {
 		t.Fatal("nginx did not move back")
 	}
-	if got := strings.Join(*calls, ","); got != "configs,image,unit,restart" {
-		t.Errorf("move = %s, want configs,image,unit,restart", got)
+	if got := strings.Join(*calls, ","); got != "configs,image,unit,restart,hosts" {
+		t.Errorf("move = %s, want configs,image,unit,restart,hosts", got)
 	}
 }
 

@@ -915,6 +915,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
+	if nginxMoved {
+		if err := podman.WriteContainerHosts(); err != nil {
+			feedback.Warn("pointing containers at nginx: %v", err)
+		}
+	}
 
 	step("Writing watcher service")
 	if content, err := lerdSystemd.GetUnit("lerd-watcher"); err == nil {

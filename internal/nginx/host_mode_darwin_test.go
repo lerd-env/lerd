@@ -240,6 +240,25 @@ func TestEnsureNativeUpstreams_rewritesAContainerFormFileOnHost(t *testing.T) {
 	}
 }
 
+// With every native site paused no vhost names an upstream, yet nginx loads the
+// file anyway, so a move rewrites it on its own.
+func TestRewriteNativeUpstreams_followsAMoveWithNoVhostNamingThem(t *testing.T) {
+	hostModeLegs(t)
+	path := filepath.Join(config.NginxConfD(), nativeUpstreamsFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(renderNativeUpstreams()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RewriteNativeUpstreams(); err != nil {
+		t.Fatal(err)
+	}
+	if got := readConf(t, path); strings.Contains(got, "host.containers.internal") {
+		t.Errorf("upstreams left in container form on the host:\n%s", got)
+	}
+}
+
 // A user's http.d override that sets the directive itself must win, not sit
 // beside lerd's, which nginx would refuse as a duplicate.
 func TestEnsureNginxConfig_onHostDefersToAnOverrideOfAbsoluteRedirect(t *testing.T) {

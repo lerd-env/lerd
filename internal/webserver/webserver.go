@@ -117,6 +117,9 @@ func OnHost() bool { return nginx.OnHost() }
 // Place moves nginx's recorded home to where it can run, reporting a move.
 func Place() (bool, error) { return nginx.Place() }
 
+// RewriteNativeUpstreams rewrites the shared native PHP upstreams for nginx's home.
+func RewriteNativeUpstreams() error { return nginx.RewriteNativeUpstreams() }
+
 // RefuseContainerSite refuses a site host nginx cannot reach while it runs there.
 func RefuseContainerSite(s config.Site) error { return nginx.RefuseContainerSite(s) }
 

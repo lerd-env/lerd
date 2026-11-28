@@ -42,13 +42,17 @@ var containerListen = regexp.MustCompile(`\blisten (80|443)\b`)
 // of 80 and 443, and loopback for the host gateway. Applying it twice is a no-op.
 func hostForm(conf []byte) []byte {
 	httpPort, httpsPort := config.NginxPorts()
+	lan := false
+	if cfg, err := config.LoadGlobal(); err == nil {
+		lan = cfg.LAN.Exposed
+	}
 	conf = ipv6Listen.ReplaceAll(conf, nil)
 	conf = containerListen.ReplaceAllFunc(conf, func(m []byte) []byte {
 		port := httpsPort
 		if bytes.HasSuffix(m, []byte("80")) {
 			port = httpPort
 		}
-		return fmt.Appendf(nil, "listen 127.0.0.1:%d", hostListenPort(port))
+		return []byte("listen " + hostListen(port, lan))
 	})
 	for _, p := range [][2]string{
 		{"/etc/nginx/certs", filepath.Join(config.CertsDir(), "sites")},
@@ -66,8 +70,18 @@ func hostForm(conf []byte) []byte {
 	return conf
 }
 
-// hostListenPort is where the host's nginx listens for a public port: the
-// loopback one the forward relays to below 1024, the port itself otherwise.
+// hostListen is where the host's nginx listens for a public port: the loopback
+// one the forward relays to, which keeps 80 and 443 on the LAN itself, or the
+// port itself, on every interface only when LAN exposure is on.
+func hostListen(public int, lan bool) string {
+	if port := hostListenPort(public); port != public || !lan {
+		return fmt.Sprintf("127.0.0.1:%d", port)
+	}
+	return fmt.Sprint(public)
+}
+
+// hostListenPort is the loopback port the forward relays a public one to, or
+// the public port itself when it is not forwarded.
 func hostListenPort(public int) int {
 	for _, p := range pfredirect.Ports() {
 		if p == public {

@@ -88,3 +88,23 @@ func TestHostForm_PinsThePublicPortAndDropsContainerOnlyLines(t *testing.T) {
 		t.Errorf("public port map should map the loopback ports back, from ${server_port}:\n%s", publicPortMap())
 	}
 }
+
+// The forward keeps 80 and 443 reachable from the LAN; a port nginx listens on
+// itself follows LAN exposure, on every interface when it is on.
+func TestHostForm_UnforwardedPortFollowsLANExposure(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.GlobalConfig{}
+	cfg.Nginx.HTTPPort, cfg.Nginx.HTTPSPort = 8080, 8443
+	cfg.LAN.Exposed = true
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	got := string(hostForm([]byte("listen 80;\nlisten 443 ssl;\n")))
+	if !strings.Contains(got, "listen 8080;") || !strings.Contains(got, "listen 8443 ssl;") {
+		t.Errorf("LAN-exposed unforwarded ports should listen on every interface:\n%s", got)
+	}
+	if again := string(hostForm([]byte(got))); again != got {
+		t.Errorf("hostForm is not idempotent:\n%s", again)
+	}
+}

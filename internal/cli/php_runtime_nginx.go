@@ -22,7 +22,8 @@ var (
 		_ = podman.DaemonReloadFn()
 		return podman.RestartUnit(podman.WebServerUnit)
 	}
-	moveEnsureImageFn = func() {
+	moveContainerHostsFn = podman.WriteContainerHosts
+	moveEnsureImageFn    = func() {
 		if podman.LocalImageID(podman.ServiceImage(podman.WebServerUnit)) == "" {
 			if err := podman.PullNginxImage(io.Discard); err != nil {
 				feedback.Warn("pulling the nginx image: %v", err)
@@ -54,6 +55,10 @@ func moveWebServer(moved bool, sites []config.Site) bool {
 	if err := moveRestartUnitFn(); err != nil {
 		feedback.Warn("starting nginx: %v", err)
 	}
+	// After the restart, so the address containers get for .test is the new home's.
+	if err := moveContainerHostsFn(); err != nil {
+		feedback.Warn("pointing containers at nginx: %v", err)
+	}
 	return true
 }
 
@@ -61,7 +66,7 @@ func moveWebServer(moved bool, sites []config.Site) bool {
 // the server-wide ones, the dashboard and catch-all, service domains, and the
 // vhosts of sites the switch skipped, paused ones and host proxies.
 func rewriteUnmovedConfigs(sites []config.Site) {
-	for _, step := range []func() error{webserver.EnsureConfig, webserver.EnsureDefaultSite, webserver.EnsureDashboard, serviceops.ApplyServiceDomains} {
+	for _, step := range []func() error{webserver.EnsureConfig, webserver.EnsureDefaultSite, webserver.EnsureDashboard, webserver.RewriteNativeUpstreams, serviceops.ApplyServiceDomains} {
 		if err := step(); err != nil {
 			feedback.Warn("rewriting nginx config: %v", err)
 		}
