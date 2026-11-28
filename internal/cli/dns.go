@@ -59,6 +59,9 @@ func EnableLANExposure(progress LANProgressFunc) (lanIP string, err error) {
 	if err := regenerateLANContainerQuadlets(progress); err != nil {
 		return "", err
 	}
+	if err := rewriteHostNginxForLAN(); err != nil {
+		return "", fmt.Errorf("rewriting the host's nginx: %w", err)
+	}
 
 	emit("Detecting primary LAN IP")
 	lanIP, err = detectPrimaryLANIP()
@@ -173,6 +176,9 @@ func DisableLANExposure(progress LANProgressFunc) error {
 	emit("Rewriting container quadlets")
 	if err := regenerateLANContainerQuadlets(progress); err != nil {
 		return err
+	}
+	if err := rewriteHostNginxForLAN(); err != nil {
+		return fmt.Errorf("rewriting the host's nginx: %w", err)
 	}
 
 	if cfg.DNS.Enabled {

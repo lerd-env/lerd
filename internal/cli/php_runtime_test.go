@@ -1,6 +1,9 @@
 package cli
 
 import (
+	gitpkg "github.com/geodro/lerd/internal/git"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -83,5 +86,34 @@ func TestXdebugRefreshCoversNativeVersionsWanted(t *testing.T) {
 	}
 	if got := xdebugRefreshVersions(config.PHPRuntimeContainer, []string{"8.3"}); !slices.Equal(got, []string{"8.3"}) {
 		t.Errorf("container refresh = %v, want [8.3]", got)
+	}
+}
+
+// A worktree pinning its own PHP gets a native listener too, or the vhost the
+// switch writes for it answers 502.
+func TestNativeVersionsWantedCoversWorktreeVersions(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	app, wt := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".lerd.yaml"), []byte("php_version: \"8.3\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{{Name: "app", Domains: []string{"app.test"}, Path: app, PHPVersion: "8.4"}}}); err != nil {
+		t.Fatal(err)
+	}
+	prev := switchWorktreesFor
+	t.Cleanup(func() { switchWorktreesFor = prev })
+	switchWorktreesFor = func(path, domain string) ([]gitpkg.Worktree, error) {
+		if path != app {
+			return nil, nil
+		}
+		return []gitpkg.Worktree{{Path: wt, Domain: "feat." + domain}}, nil
+	}
+	if got := nativeVersionsWanted(); !slices.Contains(got, "8.3") || !slices.Contains(got, "8.4") {
+		t.Errorf("wanted = %v, want the worktree's 8.3 beside 8.4", got)
+	}
+	if got := versionsInUse([]string{"8.2", "8.3", "8.4"}); !slices.Equal(got, []string{"8.3", "8.4"}) {
+		t.Errorf("in use = %v, want [8.3 8.4]", got)
 	}
 }

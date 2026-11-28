@@ -560,6 +560,9 @@ func siteHostPorts(exceptSite string) (ports map[int]bool, exceptPort int) {
 		for _, p := range s.WorktreeHostPorts {
 			ports[p] = true
 		}
+		if s.FrankenPHPHostPort > 0 {
+			ports[s.FrankenPHPHostPort] = true
+		}
 		if !s.IsHostProxy() {
 			continue
 		}

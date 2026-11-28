@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -194,13 +195,19 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	// Nginx
 	fmt.Println("\n[Nginx]")
-	running, _ := podman.ContainerRunning(podman.WebServerUnit)
-	if running {
-		ok2("lerd-nginx container")
+	nginxLabel := "lerd-nginx container"
+	if webserver.OnHost() {
+		nginxLabel = "nginx (host)"
+	}
+	if webserver.Running() {
+		ok2(nginxLabel)
 	} else {
-		fail2("lerd-nginx container",
+		fail2(nginxLabel,
 			"not running",
 			serviceStatusHint(podman.WebServerUnit))
+	}
+	if why := webserver.HeldInContainer(); why != "" {
+		note2("kept off the host", why)
 	}
 
 	// PHP

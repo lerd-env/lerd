@@ -18,6 +18,9 @@ const settleInterval = 100 * time.Millisecond
 // nginxWorkerPIDs lists the pids of the workers currently serving. Swappable
 // for tests.
 var nginxWorkerPIDs = func() ([]string, error) {
+	if OnHost() {
+		return hostWorkerPIDs()
+	}
 	out, err := podman.Run("exec", podman.WebServerUnit, "sh", "-c",
 		"ps -o pid,args | grep 'nginx: worker' | grep -v grep | awk '{print $1}'")
 	if err != nil {

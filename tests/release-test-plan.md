@@ -1389,6 +1389,25 @@ skipped rather than quietly passing it.
 - [ ] With the debug bridge on, `go run ./tools/bench` finishes all three runs
       on the native runtime with no 502 or 504, and the Mac's TIME_WAIT count
       (`netstat -an -p tcp | grep -c TIME_WAIT`) stays in the hundreds during it
+- [ ] `lerd php:runtime native` prints that nginx moved to the host, `lerd status`
+      shows `nginx (host)`, every site including a paused one answers, and
+      `lerd php:runtime container` brings the nginx container back the same way
+- [ ] With a FrankenPHP site linked, nginx still moves to the host, the site's
+      container publishes `127.0.0.1:<port>` (`podman port lerd-fp-<site> 8000`)
+      and answers **https → 200**, also after its quadlet changed before the move,
+      after pausing and resuming it on the host, and for a secured worktree of it
+- [ ] With nginx on the host, `lerd lan:expose` and `lerd lan:unexpose` leave
+      `lerd status` on `nginx (host)` with no `lerd-nginx` container restarting,
+      and `http://lerd.localhost` opens the dashboard in both states
+- [ ] A hand-edited `_default.conf` naming `/etc/nginx/certs` lets the host's
+      nginx start after the move, and is back as written after
+      `lerd php:runtime container`
+- [ ] With a custom container site linked, `lerd php:runtime native`, `lerd status`
+      and `lerd doctor` each say why nginx stays in its container, and the host
+      nginx's log has no `worker_connections exceed open file resource limit`
+- [ ] With nginx on the host and `nginx.http_port: 8080`, `lerd lan:unexpose`
+      leaves `lsof -nP -iTCP:8080 -sTCP:LISTEN` on 127.0.0.1 only, and
+      `lerd lan:expose` puts it back on every interface
 
 ## Phase 15 — plugins
 

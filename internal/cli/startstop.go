@@ -694,7 +694,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Reload nginx if it is already running so regenerated base vhosts (the
 	// dashboard and profiler vhosts) take effect without a full restart.
-	if running, _ := podman.ContainerRunning(podman.WebServerUnit); running {
+	if webserver.Running() {
 		_ = webserver.Reload()
 	}
 

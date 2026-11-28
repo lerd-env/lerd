@@ -636,7 +636,7 @@ func writeSiteConf(name string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, rendered, 0644)
+	return writeConf(confPath, rendered)
 }
 
 // renderFPMVhost renders the vhost for a site served by fastcgi, over HTTP or,
@@ -753,6 +753,14 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 		return nil, err
 	}
 
+	if site.IsFrankenPHP() && OnHost() {
+		// The host's nginx cannot resolve the container, so it goes to its loopback port.
+		hostPort, err := frankenPHPHostPortFn(site.Name)
+		if err != nil {
+			return nil, fmt.Errorf("publishing %s on a loopback port for the host's nginx: %w", site.Name, err)
+		}
+		container, port = "127.0.0.1", hostPort
+	}
 	devBase, devPort := detectSiteDevServer(site)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
@@ -778,6 +786,9 @@ func writeNonFPMConf(site config.Site, name string, rendered []byte) error {
 	removeWorkerSubdomainVhosts(site.PrimaryDomain())
 	return writeSiteConf(name, rendered)
 }
+
+// frankenPHPHostPortFn is a seam so a test claims no port in the developer's registry.
+var frankenPHPHostPortFn = podman.FrankenPHPHostPort
 
 // GenerateFrankenPHPVhost renders the HTTP vhost template for a FrankenPHP
 // site. Nginx reverse-proxies to the per-site lerd-fp-<name>:8000 container
@@ -937,7 +948,7 @@ func writeConfD(domain string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, rendered, 0644)
+	return writeConf(confPath, rendered)
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -1040,7 +1051,7 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 		return err
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
-	return WriteFileAtomic(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
+	return writeConf(filepath.Join(config.NginxConfD(), domain+".conf"), rendered)
 }
 
 // landingVhostConf renders a minimal vhost for site that serves htmlFile (read
@@ -1137,7 +1148,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 	config.GuardRealWrite(confPath)
-	if err := WriteFileAtomic(confPath, []byte(conf), 0644); err != nil {
+	if err := writeConf(confPath, []byte(conf)); err != nil {
 		return err
 	}
 	if site.Secured {
@@ -1210,7 +1221,7 @@ server {
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return WriteFileAtomic(confPath, []byte(conf), 0644)
+	return writeConf(confPath, []byte(conf))
 }
 
 // RemoveVhost deletes the vhost config files for the given domain.
@@ -1334,8 +1345,17 @@ func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ss
 var ErrNotRunning = errors.New("lerd-nginx is not running")
 
 var (
-	containerRunningFn = podman.ContainerRunningKnown
-	reloadExecFn       = func() error {
+	containerRunningFn = func(unit string) (bool, bool) {
+		if OnHost() {
+			return hostRunning()
+		}
+		return podman.ContainerRunningKnown(unit)
+	}
+	reloadExecFn = func() error {
+		if OnHost() {
+			_, err := hostNginx("-s", "reload")
+			return err
+		}
 		_, err := podman.Run("exec", podman.WebServerUnit, "nginx", "-s", "reload")
 		return err
 	}
@@ -1446,6 +1466,9 @@ func reloadWithRetry(reload func() error, timeout time.Duration) error {
 // returned error wraps context.DeadlineExceeded and the buffer carries
 // whatever podman managed to emit before the deadline fired.
 func Test() (string, error) {
+	if OnHost() {
+		return hostNginx("-t")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := podman.CmdContext(ctx, "exec", podman.WebServerUnit, "nginx", "-t")
@@ -1662,7 +1685,7 @@ func EnsureDefaultVhost() error {
 		return fmt.Errorf("writing error pages: %w", err)
 	}
 
-	canonical := renderDefaultVhost()
+	canonical := asHost(renderDefaultVhost())
 	path := filepath.Join(config.NginxConfD(), "_default.conf")
 	sentinelPath := path + defaultVhostManagedHashSuffix
 
@@ -1689,11 +1712,11 @@ func EnsureDefaultVhost() error {
 			return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 		}
 		fmt.Printf("  [INFO] %s has no lerd sentinel; preserving on-disk content. If this is from a lerd upgrade and you haven't edited it, run: rm %s\n", path, path)
-		return nil
+		return keepEditForHost(path, onDisk)
 	}
 	if lastWritten != onDiskHash {
 		fmt.Printf("  [INFO] %s differs from lerd's recorded last-write; preserving your edits. Remove the file to restore lerd's catch-all.\n", path)
-		return nil
+		return keepEditForHost(path, onDisk)
 	}
 	if onDiskHash == canonicalHash {
 		return nil
@@ -1703,6 +1726,33 @@ func EnsureDefaultVhost() error {
 		return err
 	}
 	return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
+}
+
+// keepEditForHost rewrites a preserved hand edit in the host's form, or the
+// host's nginx refuses to start on its container paths. The original is kept
+// beside it and put back when nginx returns to its container, unless edited since.
+func keepEditForHost(path string, onDisk []byte) error {
+	original := path + ".container"
+	if !OnHost() {
+		saved, err := os.ReadFile(original)
+		if err != nil {
+			return nil
+		}
+		if bytes.Equal(hostForm(saved), onDisk) {
+			if err := WriteFileAtomic(path, saved, 0644); err != nil {
+				return err
+			}
+		}
+		return os.Remove(original)
+	}
+	translated := hostForm(onDisk)
+	if bytes.Equal(translated, onDisk) {
+		return nil
+	}
+	if err := WriteFileAtomic(original, onDisk, 0644); err != nil {
+		return err
+	}
+	return WriteFileAtomic(path, translated, 0644)
 }
 
 // readFileOrEmpty returns the file's contents as a string, or "" on any
@@ -1967,6 +2017,9 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Lerd-Trust %s;
+    # The claim redirect names 127.0.0.1:7073, the proxy_pass of a host nginx,
+    # which nginx would otherwise rewrite back onto this vhost.
+    proxy_redirect off;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
 
@@ -2074,8 +2127,7 @@ func renderLerdVhost() (string, error) {
 
 func writeLerdVhost(content string) error {
 	path := filepath.Join(config.NginxConfD(), "lerd.localhost.conf")
-	config.GuardRealWrite(path)
-	return os.WriteFile(path, []byte(content), 0644)
+	return writeConf(path, []byte(content))
 }
 
 // SyncLerdVhost rewrites the lerd vhost when what lerd would serve no longer
@@ -2094,7 +2146,7 @@ func SyncLerdVhost() (bool, error) {
 		return false, err
 	}
 	current, err := os.ReadFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
-	if err == nil && string(current) == content {
+	if err == nil && string(current) == string(asHost([]byte(content))) {
 		return false, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
@@ -2162,9 +2214,21 @@ func EnsureNginxConfig() error {
 	}); err != nil {
 		return fmt.Errorf("rendering nginx.conf: %w", err)
 	}
-	rendered := dropOverriddenDefaults(buf.String(), httpOverrideNames())
-	config.GuardRealWrite(destPath)
-	return os.WriteFile(destPath, []byte(rendered), 0644)
+	rendered := buf.String()
+	if OnHost() {
+		if err := ensureHostFiles(); err != nil {
+			return err
+		}
+		// Behind the port forward nginx's own port is the loopback one, so a
+		// redirect it builds keeps the client's host and port rather than name it.
+		rendered = strings.Replace(rendered, "http {", "http {\n    absolute_redirect off;", 1)
+		// launchd supervises it, so it must not fork away from the process it
+		// started, and starts it with 256 open files, fewer than worker_connections.
+		rendered = "daemon off;\nworker_rlimit_nofile 8192;\n" + rendered
+	}
+	// After the host defaults, so a user's http.d override of one replaces it.
+	rendered = dropOverriddenDefaults(rendered, httpOverrideNames())
+	return writeConf(destPath, []byte(rendered))
 }
 
 // forwardedConf declares $real_forwarded_host / $real_forwarded_proto /
@@ -2203,12 +2267,10 @@ func EnsureForwardedConf() error {
 		return err
 	}
 	content := forwardedConf + spxKeyMap(key)
-	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_forwarded.conf"))
-	return os.WriteFile(
-		filepath.Join(config.NginxConfD(), "_forwarded.conf"),
-		[]byte(content),
-		0644,
-	)
+	if OnHost() {
+		content += publicPortMap()
+	}
+	return writeConf(filepath.Join(config.NginxConfD(), "_forwarded.conf"), []byte(content))
 }
 
 // spxKeyMap resolves $spx_key to the SPX http key for direct local requests
@@ -2247,8 +2309,7 @@ func EnsureProfilerVhost() error {
 		state = "on"
 	}
 	content := profilerVhost(cfg.PHPRuntimeMode(), cfg.PHP.DefaultVersion, ProfilerStatePath, state)
-	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
-	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
+	return writeConf(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content))
 }
 
 // ServedProfilerState reports the profiler setting nginx is serving right now,
@@ -2310,6 +2371,9 @@ func EnsureHttpD() error {
 // into the running nginx container — without this heal, the file would be
 // orphaned on disk and silently ignored.
 func RewriteNginxQuadlet() (changed bool, err error) {
+	if OnHost() {
+		return writeHostUnit()
+	}
 	content, err := podman.GetQuadletTemplate("lerd-nginx.container")
 	if err != nil {
 		return false, fmt.Errorf("reading bundled nginx quadlet template: %w", err)

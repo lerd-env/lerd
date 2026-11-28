@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // Snapshot is the full view-model the TUI renders from. Produced by
@@ -273,7 +274,7 @@ func loadStatus() StatusRow {
 		DNSOk:        dnsStatus == dns.StatusOK,
 		DNSDegraded:  dnsStatus == dns.StatusDegraded,
 		DNSDisabled:  dnsDisabled,
-		NginxRunning: podman.Cache.Running(podman.WebServerUnit),
+		NginxRunning: webserver.Up(),
 		Autostart:    lerdSystemd.IsAutostartEnabled(),
 		LANExposed:   cfg != nil && cfg.LAN.Exposed,
 	}

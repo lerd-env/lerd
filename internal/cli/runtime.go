@@ -226,6 +226,11 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 			return err
 		}
 	}
+	probe := *site
+	probe.Runtime = "frankenphp"
+	if err := webserver.RefuseContainerSite(probe); err != nil {
+		return err
+	}
 	wasNative := site.IsNative()
 	// Workers currently exec into the shared FPM container; stop them so they
 	// can be recreated against the per-site FrankenPHP container below.

@@ -36,7 +36,16 @@ var nginxInspectTimeout = 5 * time.Second
 // lerd-nginx directly on the lerd bridge network.
 func WriteContainerHosts() error {
 	hostIP := DetectHostGatewayIP()
-	return WriteContainerHostsWith(hostIP, nginxContainerIP())
+	return WriteContainerHostsWith(hostIP, siteDomainsIP(hostIP))
+}
+
+// siteDomainsIP is where containers send .test requests: lerd-nginx on the
+// bridge, or the host gateway when nginx runs on the host.
+func siteDomainsIP(hostIP string) string {
+	if config.NginxOnHost() {
+		return hostIP
+	}
+	return nginxContainerIP()
 }
 
 // WriteContainerHostsWith writes both hosts files from addresses the caller

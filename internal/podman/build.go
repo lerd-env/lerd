@@ -1241,8 +1241,9 @@ func RewriteFPMQuadlets() error {
 		}
 	}
 
-	// Also rewrite nginx quadlet with the same extra volumes.
-	if nginxContent, err := GetQuadletTemplate("lerd-nginx.container"); err == nil {
+	// Also rewrite nginx quadlet with the same extra volumes, unless nginx runs
+	// on the host, where its own unit carries that name.
+	if nginxContent, err := GetQuadletTemplate("lerd-nginx.container"); err == nil && !config.NginxOnHost() {
 		httpPort, httpsPort := config.NginxPorts()
 		nginxContent = ApplyNginxPorts(nginxContent, httpPort, httpsPort)
 		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)

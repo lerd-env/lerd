@@ -281,3 +281,26 @@ func TestEnsurePathMountedSyncsPlatformUnitsOnDrift(t *testing.T) {
 		t.Fatalf("synced %v, want both lerd-php84-fpm and lerd-nginx", synced)
 	}
 }
+
+// nginx on the host has its own unit under the same name, so the FPM refresh a
+// link or install runs must not write the container one back over it.
+func TestRewriteFPMQuadlets_leavesHostNginxAlone(t *testing.T) {
+	cfgHome := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.SetNginxOnHost(true); err != nil {
+		t.Fatal(err)
+	}
+	lc := &restartRecorder{}
+	prevLC := UnitLifecycle
+	UnitLifecycle = lc
+	t.Cleanup(func() { UnitLifecycle = prevLC })
+
+	if err := RewriteFPMQuadlets(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cfgHome, "containers", "systemd", "lerd-nginx.container")); !os.IsNotExist(err) {
+		t.Errorf("container nginx unit written while nginx runs on the host: %v", err)
+	}
+}

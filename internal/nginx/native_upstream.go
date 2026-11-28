@@ -70,9 +70,20 @@ func ensureNativeUpstreamsFor(rendered []byte) error {
 	}
 	path := filepath.Join(config.NginxConfD(), nativeUpstreamsFile)
 	want := []byte(renderNativeUpstreams())
-	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, want) {
+	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, asHost(want)) {
 		return nil
 	}
 	config.GuardRealWrite(path)
-	return WriteFileAtomic(path, want, 0644)
+	return writeConf(path, want)
+}
+
+// RewriteNativeUpstreams rewrites the upstreams file, when there is one, for
+// wherever nginx now runs: nginx loads it whether or not any vhost names it.
+func RewriteNativeUpstreams() error {
+	path := filepath.Join(config.NginxConfD(), nativeUpstreamsFile)
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	config.GuardRealWrite(path)
+	return writeConf(path, []byte(renderNativeUpstreams()))
 }

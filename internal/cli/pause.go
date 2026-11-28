@@ -275,7 +275,11 @@ func UnpauseSite(name string) error {
 		// their host-proxy vhosts and dev servers here.
 		unpauseHostProxyWorktrees(site)
 	case site.IsFrankenPHP():
-		_ = podman.StartUnit(podman.FrankenPHPContainerName(site.Name))
+		// Paused through the move to the host, its container predates the loopback
+		// port; publishing starts it, and a second start would replace it again.
+		if !webserver.OnHost() || !publishFrankenPHP(*site) {
+			_ = podman.StartUnit(podman.FrankenPHPContainerName(site.Name))
+		}
 		if err := webserver.ApplySite(*site); err != nil {
 			return fmt.Errorf("restoring FrankenPHP vhost: %w", err)
 		}

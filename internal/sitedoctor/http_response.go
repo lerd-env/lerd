@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // httpCheckTimeout bounds the request. A root that needs longer than this is a
@@ -38,7 +38,7 @@ var httpProbe = func(url string) (int, error) {
 }
 
 // nginxUp is hooked for the same reason.
-var nginxUp = func() bool { return podman.ContainerRunningQuiet(podman.WebServerUnit) }
+var nginxUp = webserver.Running
 
 // checkHTTPResponse asks the site for its root and reports what came back.
 // Every other check here reads configuration, and configuration can be perfect

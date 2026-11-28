@@ -27,6 +27,7 @@ import (
 	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
@@ -507,6 +508,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	switch {
 	case storeHost == "":
 		// A store base with no hostname leaves nothing to look up.
+	case webserver.OnHost():
+		info("internet DNS from containers", "skipped: nginx runs on the host, so there is no nginx container to resolve from")
 	case !podman.ContainerRunningQuiet(podman.WebServerUnit):
 		warn("internet DNS from containers", "skipped — lerd-nginx not running (start lerd first)")
 	case podman.ResolvesFromNginx(storeHost):
@@ -525,8 +528,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	// host that moved them, probing the defaults reports a conflict that no
 	// config change can resolve (#1544).
 	httpPort, httpsPort := config.NginxPorts()
-	nginxRunning, _ := podman.ContainerRunning(podman.WebServerUnit)
-	nginxInstalled := services.Mgr.ContainerUnitInstalled(podman.WebServerUnit)
+	nginxRunning := webserver.Running()
+	nginxInstalled := webserver.OnHost() || services.Mgr.ContainerUnitInstalled(podman.WebServerUnit)
 	redirected := portforward.Redirected()
 	for _, p := range []int{httpPort, httpsPort} {
 		port := strconv.Itoa(p)
@@ -635,6 +638,9 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		if !nginxInstalled {
 			rep.fixLast(autoFix(fixInstall, "", "install the lerd services (lerd install)"))
 		}
+	}
+	if why := webserver.HeldInContainer(); why != "" {
+		info("nginx kept off the host", why)
 	}
 
 	// The native runtime has no images, and the rebuild these findings point at

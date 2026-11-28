@@ -580,6 +580,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	// 6. Nginx
+	// Before any nginx file is written, so each is written for the nginx that runs it.
+	nginxMoved, err := webserver.Place()
+	if err != nil {
+		return fmt.Errorf("placing nginx: %w", err)
+	}
+	if !nginxMoved {
+		noteNginxHeld()
+	}
 	step("Writing nginx configuration")
 	if err := webserver.EnsureConfig(); err != nil {
 		return err
@@ -625,6 +633,13 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		}
 		rewakeSleepingSites(reg.Sites)
+		// A move leaves no file in the old home's form: one worktree, paused page or
+		// service domain that kept it stops the host's nginx starting.
+		if nginxMoved {
+			followNginxMove(reg.Sites)
+		} else if webserver.OnHost() {
+			rewriteUnmovedConfigs(reg.Sites)
+		}
 	}
 	ok()
 
@@ -670,9 +685,20 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	step("Writing nginx quadlet")
-	if err := rewriteEmbedded(podman.WebServerUnit); err != nil {
-		return err
+	if webserver.OnHost() {
+		step("Writing nginx service unit")
+		changed, err := webserver.RewriteUnit()
+		if err != nil {
+			return err
+		}
+		if changed {
+			changedQuadlets = append(changedQuadlets, podman.WebServerUnit)
+		}
+	} else {
+		step("Writing nginx quadlet")
+		if err := rewriteEmbedded(podman.WebServerUnit); err != nil {
+			return err
+		}
 	}
 	ok()
 
@@ -776,13 +802,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// registry traffic (docker.io, ghcr.io, etc.).
 	// The nginx image is declared once, in the quadlet template.
 	nginxImage := podman.ServiceImage(podman.WebServerUnit)
-	pullJobs := []BuildJob{
-		{
-			Label: "Pulling " + nginxImage,
-			Run:   podman.PullNginxImage,
-		},
+	var pullJobs []BuildJob
+	// The host's nginx comes from Homebrew, so there is no image to pull.
+	if !webserver.OnHost() {
+		pullJobs = append(pullJobs, BuildJob{Label: "Pulling " + nginxImage, Run: podman.PullNginxImage})
+		webServerPullPlan(nginxImage).Fill().Report(os.Stdout)
 	}
-	webServerPullPlan(nginxImage).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
 		step(job.Label)
 		if err := job.Run(io.Discard); err != nil {
@@ -870,8 +895,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	var nginxErr error
 	if autostartOn || nginxRestartOwed {
-		running, _ := podman.ContainerRunning(podman.WebServerUnit)
-		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, podman.WebServerUnit), podman.ContainerImageID(podman.WebServerUnit), podman.LocalImageID(nginxImage)) {
+		running := webserver.Running()
+		unitChanged := loopbackRedirectAdded || slices.Contains(changedQuadlets, podman.WebServerUnit)
+		// The host's nginx has no image to fall behind, only a unit to rewrite.
+		restart := !running || unitChanged
+		if !webserver.OnHost() {
+			restart = nginxNeedsRestart(running, unitChanged, podman.ContainerImageID(podman.WebServerUnit), podman.LocalImageID(nginxImage))
+		}
+		if restart {
 			step("Starting lerd-nginx")
 			if nginxErr = services.Mgr.Restart(podman.WebServerUnit); nginxErr != nil {
 				fmt.Printf("    WARN: %v\n", nginxErr)
@@ -885,6 +916,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			} else {
 				ok()
 			}
+		}
+	}
+	if nginxMoved {
+		if err := podman.WriteContainerHosts(); err != nil {
+			feedback.Warn("pointing containers at nginx: %v", err)
 		}
 	}
 

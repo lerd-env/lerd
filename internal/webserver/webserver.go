@@ -111,6 +111,33 @@ func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, 
 	return nginx.GenerateServiceProxyVhost(domain, upstreamHost, upstreamPort, ssl, cors)
 }
 
+// OnHost reports whether nginx runs on the host rather than in its container.
+func OnHost() bool { return nginx.OnHost() }
+
+// HeldInContainer is why nginx stays in its container when native PHP would move it.
+func HeldInContainer() string { return nginx.HeldInContainer() }
+
+// Place moves nginx's recorded home to where it can run, reporting a move.
+func Place() (bool, error) { return nginx.Place() }
+
+// RewriteNativeUpstreams rewrites the shared native PHP upstreams for nginx's home.
+func RewriteNativeUpstreams() error { return nginx.RewriteNativeUpstreams() }
+
+// RefuseContainerSite refuses a site host nginx cannot reach while it runs there.
+func RefuseContainerSite(s config.Site) error { return nginx.RefuseContainerSite(s) }
+
+// Running reports whether the web server is up, wherever it runs.
+func Running() bool { return nginx.Running() }
+
+// Up is Running for status surfaces that poll, cheap enough to read per snapshot.
+func Up() bool { return nginx.Up() }
+
+// UseServiceManager hands the backend the writer for units it runs outside a
+// container, the host's nginx among them.
+func UseServiceManager(write func(name, content string) (bool, error)) {
+	nginx.WriteServiceUnit = write
+}
+
 // current is nginx until a second backend and the switch to it exist.
 var current Backend = nginxBackend{}
 

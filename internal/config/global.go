@@ -208,6 +208,9 @@ type GlobalConfig struct {
 		// overridable per project via .lerd.yaml request_timeout. Zero falls
 		// back to nginx's own 60s default; read it via RequestTimeoutSeconds.
 		RequestTimeout int `yaml:"request_timeout,omitempty" mapstructure:"request_timeout"`
+		// Runtime keeps nginx in the lerd-nginx container when set to "container";
+		// otherwise it runs on the host beside native PHP. Read it via NginxRuntimeMode.
+		Runtime string `yaml:"runtime,omitempty" mapstructure:"runtime"`
 	} `yaml:"nginx" mapstructure:"nginx"`
 	DNS struct {
 		// Enabled=false skips lerd-dns, mkcert CA, sudoers, and resolver

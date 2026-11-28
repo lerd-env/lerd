@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +18,17 @@ func TestServiceRecentLogs_unknownUnit(t *testing.T) {
 }
 
 func TestIsContainerUnit_nginx(t *testing.T) {
-	// lerd-nginx is a container on both platforms
+	// lerd-nginx in its container, the default; on macOS the plist says which,
+	// so the test brings its own rather than reading the developer's.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	agents := filepath.Join(home, "Library", "LaunchAgents")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agents, "lerd-nginx.plist"), []byte("<plist><dict><key>Label</key><string>lerd-nginx</string></dict></plist>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if !isContainerUnit("lerd-nginx") {
 		t.Error("expected isContainerUnit to return true for lerd-nginx")
 	}
