@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,12 +25,15 @@ import (
 // is shown again.
 const termScrollback = 256 << 10
 
-// termGrace is how long terminals outlive the last dashboard window, so a
-// reload, which drops and reopens its socket, does not end them.
-var termGrace = 10 * time.Second
+// termGrace is how long terminals outlive the last dashboard, so a reload does
+// not end them; termPing is how often an attached page is pinged. Atomic, as
+// tests shorten them while an earlier test's terminal may still read them.
+var termGrace, termPing atomic.Int64
 
-// termPing is how often an attached page is asked whether it is still there.
-var termPing = 25 * time.Second
+func init() {
+	termGrace.Store(int64(10 * time.Second))
+	termPing.Store(int64(25 * time.Second))
+}
 
 // termSession is one plugin terminal. It outlives the page that opened it once
 // the user has typed into it, until it exits, the page closes it, or the last
@@ -175,7 +179,7 @@ func (s *termSession) serve(conn *wsConn) (closed bool) {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
-		tick := time.NewTicker(termPing)
+		tick := time.NewTicker(time.Duration(termPing.Load()))
 		defer tick.Stop()
 		for {
 			select {
@@ -189,7 +193,7 @@ func (s *termSession) serve(conn *wsConn) (closed bool) {
 		}
 	}()
 	for {
-		_ = conn.SetReadDeadline(time.Now().Add(3 * termPing))
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Duration(termPing.Load())))
 		op, payload, err := conn.ReadFrame()
 		if err != nil {
 			return false
@@ -332,7 +336,7 @@ func dashboardClosed() {
 	if terms.dashboards--; terms.dashboards > 0 {
 		return
 	}
-	terms.gone = time.AfterFunc(termGrace, endAllTerminals)
+	terms.gone = time.AfterFunc(time.Duration(termGrace.Load()), endAllTerminals)
 }
 
 func endAllTerminals() {

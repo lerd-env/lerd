@@ -269,9 +269,9 @@ func TestPluginTerminal_ATouchedTerminalOutlivesItsPage(t *testing.T) {
 
 func TestPluginTerminal_EndsWhenTheLastDashboardCloses(t *testing.T) {
 	data := installTerminalPlugin(t)
-	grace := termGrace
-	termGrace = 50 * time.Millisecond
-	t.Cleanup(func() { termGrace = grace })
+	grace := termGrace.Load()
+	termGrace.Store(int64(50 * time.Millisecond))
+	t.Cleanup(func() { termGrace.Store(grace) })
 	withDashboard(t)
 	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
 	defer srv.Close()
@@ -396,9 +396,9 @@ func TestPluginTerminal_AttachingToAnEndedSessionCloses(t *testing.T) {
 // socket lives in a dashboard window, so it is dead or about to be.
 func TestPluginTerminal_AttachedTerminalsEndWithTheLastDashboard(t *testing.T) {
 	data := installTerminalPlugin(t)
-	grace := termGrace
-	termGrace = 50 * time.Millisecond
-	t.Cleanup(func() { termGrace = grace })
+	grace := termGrace.Load()
+	termGrace.Store(int64(50 * time.Millisecond))
+	t.Cleanup(func() { termGrace.Store(grace) })
 	withDashboard(t)
 	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
 	defer srv.Close()
@@ -416,9 +416,9 @@ func TestPluginTerminal_AttachedTerminalsEndWithTheLastDashboard(t *testing.T) {
 // answering pings is let go like a page that left, so an untouched terminal ends.
 func TestPluginTerminal_ASilentPageIsLetGo(t *testing.T) {
 	data := installTerminalPlugin(t)
-	ping := termPing
-	termPing = 50 * time.Millisecond
-	t.Cleanup(func() { termPing = ping })
+	ping := termPing.Load()
+	termPing.Store(int64(50 * time.Millisecond))
+	t.Cleanup(func() { termPing.Store(ping) })
 	withDashboard(t)
 	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
 	defer srv.Close()
