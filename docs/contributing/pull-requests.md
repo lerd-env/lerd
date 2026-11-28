@@ -55,6 +55,8 @@ A CI check fails when a PR touches `internal/ui/web/src/`, `internal/tui/` or `c
 
 Every PR asks the maintainers team for a review through `CODEOWNERS`, and a maintainer's approval is what lets it merge. When a PR is opened, reopened or marked ready for review, a workflow also asks the contributors team to look at it, so contributors hear about new work. Drafts and PRs opened by bots are left alone. A contributor's review is welcome feedback, but it does not replace the maintainer approval.
 
+The workflow's own token cannot request a team, so it uses a fine-grained token stored as the `CONTRIBUTOR_REVIEW_TOKEN` repository secret, owned by `lerd-env`, scoped to this repository, with Pull requests read and write and organization Members read. When the secret is missing or expired, or GitHub refuses the request, the run shows a warning with GitHub's reason and the PR's checks stay green, since a missed request only costs a notification.
+
 ## CI checks
 
 Every PR runs the following checks automatically. All must pass before merging.
