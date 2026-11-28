@@ -45,27 +45,38 @@ var (
 	getFrameworkFn = config.GetFrameworkForDir
 
 	phpConstraintsFor = func(site *config.Site) []string {
-		project := php.ComposerPHPConstraint(site.Path)
 		// What the resolved tree requires, which can be stricter than what the
 		// project's own manifest claims, and is what the first request obeys.
-		locked := php.LockedPlatformPHPConstraint(site.Path)
-		framework := ""
-		if site.Framework != "" {
-			if fw, ok := getFrameworkFn(site.Framework, site.Path); ok && !fw.VersionGuessed {
-				framework = phpRangeConstraint(fw.PHP.Min, fw.PHP.Max)
-			}
-		}
-		switch {
-		case framework == "":
-			return compactConstraints(project, locked)
-		case project == "":
-			return compactConstraints(framework, locked)
-		case !php.ConstraintsOverlap(framework, project):
-			return compactConstraints(project, locked)
-		}
-		return compactConstraints(framework, project, locked)
+		return compactConstraints(append(manifestPHPConstraints(site), php.LockedPlatformPHPConstraint(site.Path))...)
+	}
+
+	// alignConstraintsFor reads the checked-out composer.lock instead of vendor/,
+	// which a branch switch leaves from the previous branch until composer runs.
+	alignConstraintsFor = func(site *config.Site) []string {
+		return compactConstraints(append(manifestPHPConstraints(site), php.LockPHPConstraints(site.Path)...)...)
 	}
 )
+
+// manifestPHPConstraints is the framework definition's range and the project's
+// composer.json requirement, with a range that cannot meet the project left out.
+func manifestPHPConstraints(site *config.Site) []string {
+	project := php.ComposerPHPConstraint(site.Path)
+	framework := ""
+	if site.Framework != "" {
+		if fw, ok := getFrameworkFn(site.Framework, site.Path); ok && !fw.VersionGuessed {
+			framework = phpRangeConstraint(fw.PHP.Min, fw.PHP.Max)
+		}
+	}
+	switch {
+	case framework == "":
+		return compactConstraints(project)
+	case project == "":
+		return compactConstraints(framework)
+	case !php.ConstraintsOverlap(framework, project):
+		return compactConstraints(project)
+	}
+	return compactConstraints(framework, project)
+}
 
 // compactConstraints drops the empty entries, so a caller can hand over whatever
 // it found without checking each one.

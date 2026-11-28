@@ -805,6 +805,9 @@ lerd worktree add -b feat-x
       branch adds migrations, starts empty when it is behind, and prints its
       `Database:` reason, **200** each time
 - [ ] **Parent site still → 200 after all worktree churn**
+- [ ] Switching the main checkout to a branch whose composer.json requires a
+      newer installed PHP moves the site onto it before composer install runs,
+      prints `PHP switched to <version> for this branch`, **200**
 
 ---
 
