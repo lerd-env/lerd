@@ -378,7 +378,8 @@ func regenerateWorktreeVhosts(s *config.Site) {
 		return
 	}
 	for _, wt := range wts {
-		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
+		php := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
+		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, php, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 			feedback.Warn("regenerating the vhost for %s: %v", wt.Domain, err)
 		}
 	}

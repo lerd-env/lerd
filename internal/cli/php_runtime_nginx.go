@@ -118,19 +118,25 @@ var refreshFrankenPHPFn = func(s config.Site) error {
 	return podman.RestartUnit(unit)
 }
 
-// frankenPHPPublishes reports whether the running container serves its port on
-// the loopback one the host's nginx proxies to.
+// frankenPHPPublishes reports whether the container is running and serves its
+// port on the loopback one the host's nginx proxies to.
 func frankenPHPPublishes(unit string, hostPort int) bool {
+	if running, _ := podman.ContainerRunning(unit); !running {
+		return false
+	}
 	out, err := podman.Run("port", unit, strconv.Itoa(podman.FrankenPHPPort))
 	return err == nil && strings.Contains(out, fmt.Sprintf("127.0.0.1:%d", hostPort))
 }
 
 // publishFrankenPHP restarts a FrankenPHP container on the loopback port the
-// host's nginx proxies to, when its quadlet did not publish one yet.
-func publishFrankenPHP(s config.Site) {
+// host's nginx proxies to, when its quadlet did not publish one yet. It
+// reports whether the container is up on it, started here or already.
+func publishFrankenPHP(s config.Site) bool {
 	if err := refreshFrankenPHPFn(s); err != nil {
 		feedback.Warn("publishing %s for the host's nginx: %v", s.Name, err)
+		return false
 	}
+	return true
 }
 
 var (
