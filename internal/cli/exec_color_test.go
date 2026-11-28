@@ -39,7 +39,7 @@ func TestConsoleCmdArgs(t *testing.T) {
 
 func TestPhpShellExecArgs(t *testing.T) {
 	truecolorHost(t)
-	got := strings.Join(phpShellExecArgs("lerd-php84-fpm", "/proj"), " ")
+	got := strings.Join(phpShellExecArgs("lerd-php84-fpm", "/proj", "s1"), " ")
 	if !strings.HasPrefix(got, "exec -it ") {
 		t.Errorf("phpShellExecArgs() = %q, want an interactive exec", got)
 	}

@@ -54,7 +54,7 @@ func TestWithContainerNode_NoBuildLeavesThePath(t *testing.T) {
 // Node while the dashboard reported the site's.
 func TestPhpShellExecArgs_CarriesTheSitesNode(t *testing.T) {
 	site, bin := siteWithNode(t, true)
-	args := phpShellExecArgs("lerd-php85-fpm", site)
+	args := phpShellExecArgs("lerd-php85-fpm", site, "s1")
 	i := slices.Index(args, "PATH="+bin+":"+podman.ContainerPath)
 	if i < 1 || args[i-1] != "--env" || i > slices.Index(args, "lerd-php85-fpm") {
 		t.Errorf("the shell's PATH must lead with the site's Node: %q", args)
