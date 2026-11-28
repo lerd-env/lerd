@@ -104,3 +104,4 @@ todo "7.26 worktree.migrations picks share / clone / empty with its reason" "nee
 for b in "$x" "vmm$tag" "vmw$tag"; do lerd worktree remove --force "$(wt "$b")" </dev/null >/dev/null 2>&1; done
 git branch -q -D "$x" "$y" "$i" "vmm$tag" "vmw$tag" 2>/dev/null
 expect_200 7.27 "$parent_url"
+todo "7.28 a branch switch moves the site onto the PHP the branch requires" "needs a branch requiring a newer installed PHP"

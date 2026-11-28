@@ -452,22 +452,19 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 	return e
 }
 
-// PersistVersionChanges writes back any detected version changes to the site registry.
+// PersistVersionChanges writes back detected Node version changes to the site
+// registry. PHP is left to the watcher, which moves the vhost with it: writing it
+// here alone made the watcher see no change and nginx kept the old version.
 func PersistVersionChanges(sites []EnrichedSite) error {
 	for _, e := range sites {
-		if !e.PHPVersionChanged && !e.NodeVersionChanged {
+		if !e.NodeVersionChanged {
 			continue
 		}
 		s, err := config.FindSite(e.Name)
 		if err != nil {
 			continue
 		}
-		if e.PHPVersionChanged {
-			s.PHPVersion = e.PHPVersion
-		}
-		if e.NodeVersionChanged {
-			s.NodeVersion = e.NodeVersion
-		}
+		s.NodeVersion = e.NodeVersion
 		if err := config.AddSite(*s); err != nil {
 			return err
 		}

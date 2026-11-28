@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/serviceops"
+	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/sitetpl"
 )
 
@@ -109,6 +110,19 @@ func sharedWorktrees(sitePath, domain string) []string {
 		}
 	}
 	return shared
+}
+
+// alignCheckoutPHP moves the site owning the checkout at dir onto a PHP its
+// code accepts; a seam so the switch tests need no site registry.
+var alignCheckoutPHP = func(dir string) (string, error) {
+	site, ok := config.ParentSiteForWorktreeDir(dir)
+	if !ok {
+		var err error
+		if site, err = config.FindSiteByPath(dir); err != nil {
+			return "", nil
+		}
+	}
+	return siteops.AlignPHPVersion(site, dir)
 }
 
 // switching holds the checkouts with a switch in flight, keyed by path.
@@ -396,6 +410,12 @@ func runSteps(fwAfter func() *config.Framework, path string, move func() (string
 			return snap, err
 		}
 		fmt.Fprintln(out, "Database restored from snapshot "+steps.Restore)
+	}
+	// Before composer: the branch may require a PHP the site is not on yet.
+	if v, err := alignCheckoutPHP(path); err != nil {
+		return "", fmt.Errorf("%w; build one with 'lerd php:rebuild <version>'", err)
+	} else if v != "" {
+		fmt.Fprintln(out, "PHP switched to "+v+" for this branch")
 	}
 	if steps.Composer {
 		if err := gitpkg.InstallComposer(path, out); err != nil {
