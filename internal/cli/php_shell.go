@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
@@ -40,8 +44,9 @@ func shellWorkDir(cwd string) string {
 // terminal's colour capability so starship and the tools run in the session
 // render as they do on the host. An empty workDir leaves the container on its
 // own default, which is what a version shell with no project behind it wants.
-func phpShellExecArgs(container, workDir string) []string {
+func phpShellExecArgs(container, workDir, session string) []string {
 	args := append([]string{"exec", "-it"}, terminalColorEnvArgs()...)
+	args = append(args, "--env", shellSessionVar+"="+session)
 	if workDir != "" {
 		args = append(args, "-w", workDir)
 		args = append(args, envpass.Args(workDir, os.Environ())...)
@@ -73,6 +78,16 @@ func runVersionShell(input string) error {
 	return runPhpShellExec(container, "")
 }
 
+// shellSessionVar marks the processes of one lerd shell in the container.
+const shellSessionVar = "LERD_SHELL_SESSION"
+
+// shellHangUpScript sends SIGHUP to every process in the container carrying
+// session's mark, which the shell and all it started inherit.
+func shellHangUpScript(session string) string {
+	return `for p in /proc/[0-9]*; do tr '\0' '\n' <"$p/environ" 2>/dev/null | grep -qx '` +
+		shellSessionVar + "=" + session + `' && kill -HUP "${p#/proc/}" 2>/dev/null; done; exit 0`
+}
+
 // runPhpShellExec hands the terminal over to the container shell, exiting with
 // its status so a shell that ends on an error is not reported as a clean run.
 func runPhpShellExec(container, workDir string) error {
@@ -80,11 +95,28 @@ func runPhpShellExec(container, workDir string) error {
 		ensureContainerNode(workDir, os.Stderr)
 		ensureContainerBindings(workDir)
 	}
-	cmd := podman.Cmd(phpShellExecArgs(container, workDir)...)
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	session := hex.EncodeToString(b)
+	cmd := podman.Cmd(phpShellExecArgs(container, workDir, session)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// podman exec outlives a hang-up, holding the shell open, so lerd hangs up
+	// on the container shell, which ends podman exec in turn. The cleanup gets
+	// a process group of its own: whoever hung up may kill this group next.
+	hangups := make(chan os.Signal, 1)
+	signal.Notify(hangups, syscall.SIGHUP, syscall.SIGTERM)
+	defer signal.Stop(hangups)
+	go func() {
+		if _, ok := <-hangups; ok {
+			hangUp := podman.Cmd("exec", container, "sh", "-c", shellHangUpScript(session))
+			hangUp.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			_ = hangUp.Run()
+		}
+	}()
+	err := cmd.Run()
+	if err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}

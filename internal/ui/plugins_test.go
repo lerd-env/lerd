@@ -34,6 +34,7 @@ name: echo
 api:
   - {path: say, methods: [GET, POST], run: bin/say}
   - {path: host, methods: [POST], run: bin/say, loopback_only: true}
+  - {path: term, run: bin/say, pty: true}
 ui:
   page: {title: Echo, icon: ui/icon.svg, entry: ui/index.html}
   site_tab: {title: Echo, entry: ui/site.html}
@@ -402,6 +403,7 @@ func TestPluginPages_ServeScriptAndEndpointsToSwitchedOnSites(t *testing.T) {
 		{"endpoint gets the site", pageRequest(http.MethodPost, "/_lerd/plugins/echo/api/say", "on"), 200, `"surface":"api"`},
 		{"site never switched it on", pageRequest(http.MethodGet, "/_lerd/plugins/echo/page.js", "off"), 404, ""},
 		{"loopback_only stays off the page", pageRequest(http.MethodPost, "/_lerd/plugins/echo/api/host", "on"), 403, ""},
+		{"a terminal stays off the page", pageRequest(http.MethodGet, "/_lerd/plugins/echo/api/term", "on"), 403, ""},
 		{"not through nginx", direct, 403, ""},
 	}
 	cross := pageRequest(http.MethodPost, "/_lerd/plugins/echo/api/say", "on")

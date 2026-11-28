@@ -114,6 +114,9 @@ api:                        # served at /api/plugins/hello/greet
     run: bin/greet
     loopback_only: false    # true keeps it to the lerd host, like lerd's own host actions
     timeout: 2m             # longer than the 30 second default, up to 10m
+  - path: shell
+    run: bin/shell
+    pty: true               # a terminal, opened from a page with lerd.terminal, see below
 
 schedules:                  # run on their own, once the user allows it; see Schedules below
   - name: sweep
@@ -240,6 +243,7 @@ Per surface:
 - **Site commands** run in the site's directory with `LERD_BRANCH` set when a worktree is selected, and stream their output to the dashboard's run modal like any other command.
 - **MCP tools** get the tool's arguments as JSON on stdin; stdout is the result, and a non-zero exit is reported to the assistant as an error. A `site` argument hands over the site.
 - **API endpoints** get the request body on stdin and `LERD_METHOD` and `LERD_QUERY`; a `site` query parameter hands over the site, and a `branch` beside it runs the call in that worktree's checkout with `LERD_BRANCH` set, answering 404 for a branch the site has no worktree of. `LERD_SITE_PATH` stays the main folder. lerd before 1.40 ignores `branch` and runs in the main folder. A zero exit answers 200 with stdout, served as JSON when it parses as JSON, and any other exit answers 500 with stderr.
+- **Terminals**, endpoints with `pty: true`, run on a pseudo terminal with `TERM=xterm-256color`, in the same folder and with the same variables as any endpoint. What they print goes to the page and what the page types reaches their stdin. One the page has typed into keeps running when the page goes away, so leaving the tab or reloading the dashboard comes back to it; it ends when it exits, when the page closes it, or ten seconds after the last dashboard window closes. Ending hangs up on it and everything it started, as closing a terminal window does.
 - **Hooks** get `LERD_EVENT` and the event's payload, both as JSON on stdin and as `LERD_<KEY>` variables.
 - **Schedules** get `LERD_SCHEDULE`, the schedule's name, and nothing on stdin. Their output goes to `schedule.log` in the plugin's data folder.
 
@@ -255,6 +259,8 @@ Every surface but the CLI stops an executable that runs past its limit, together
 | Site commands | 30m | 1h |
 | Jobs under `provides` | 5m | fixed |
 | Schedules | 5m | 10m |
+
+A terminal has no limit either, since it runs until you close it, and a `timeout` on one refuses the plugin.
 
 `timeout` takes a duration like `90s` or `10m` on a single site command, MCP tool, API endpoint or schedule. A value past the ceiling refuses the plugin with a message naming it.
 
@@ -375,6 +381,24 @@ try {
 ```
 
 The call rejects after a moment on a lerd that does not answer, so a page can fall back to its own editor. An older lerd ignores the call, so a page that relies on it should say which lerd it needs with `lerd:` in `plugin.yaml`.
+
+### Opening a terminal
+
+A page opens a terminal on one of its `pty: true` endpoints with `lerd.terminal`, sized in columns and rows, and gets a `MessagePort` to it. Post strings to type into it, `{type: 'resize', cols, rows}` when the page resizes, and `{type: 'close'}` to end it. Its output arrives as `ArrayBuffer`s, after `{type: 'session', id}` naming it, and `{type: 'close'}` once it has ended or the page let go of it:
+
+```js
+const port = await lerd.terminal('shell?site=' + encodeURIComponent(lerd.context.site), { cols: 80, rows: 24 });
+port.onmessage = (e) => (e.data instanceof ArrayBuffer ? term.write(new Uint8Array(e.data)) : console.log('ended'));
+term.onData((keys) => port.postMessage(keys));
+```
+
+The dashboard holds the connection for the page and lets go of it when the page goes away. To come back to a terminal, a page lists the site's terminals on an endpoint with a plain GET, `lerd.api('shell?site=...')`, which answers `[{id, started}]`, and opens one again with `session=<id>` in the path, which replays its last 256 KB of output first. Lerd draws nothing itself, so the page brings its own terminal, such as [xterm.js](https://xtermjs.org) shipped in its `ui/` folder. The call rejects after a moment on an older lerd, which serves the endpoint as a plain one, so a plugin with a terminal declares the release that added them in `lerd:`.
+
+A terminal runs anything as you, so lerd treats it as `loopback_only` whatever the manifest says: a dashboard on the LAN reaches it only once `lerd remote-control full-access on` is set, and a site's page script never does. A terminal endpoint takes GET alone.
+
+### Taking the whole page
+
+A page that wants more room, such as a terminal, can cover the whole dashboard with `await lerd.maximize(true)` and go back to its place with `lerd.maximize(false)`; each resolves with whether the page is now maximized. The dashboard puts the page back whenever it is replaced, and leaves Escape to the page, so the page draws its own button to restore it. The call rejects after a moment on an older lerd, so a page can hide that button there.
 
 ### Speaking the user's language
 
