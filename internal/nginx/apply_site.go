@@ -1,6 +1,9 @@
 package nginx
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -9,6 +12,18 @@ import (
 // HTTPS when it is secured, on the global default PHP when the site names
 // none. Paused and waking pages are written elsewhere.
 func ApplySite(site config.Site) error {
+	if err := applySite(site); err != nil {
+		return err
+	}
+	// An older binary interrupted mid-secure left <domain>-ssl.conf beside it,
+	// which nginx loads first, so the vhost just written would not be the one served.
+	if err := os.Remove(filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func applySite(site config.Site) error {
 	name := site.PrimaryDomain() + ".conf"
 	switch {
 	case site.IsHostProxy():
