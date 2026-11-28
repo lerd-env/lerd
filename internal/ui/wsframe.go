@@ -14,22 +14,19 @@ import (
 	"time"
 )
 
-// Hand-rolled RFC6455 WebSocket helpers. Scope: lerd-ui only ever sends JSON
-// text frames to browser clients, so this supports the subset we need —
-// server-side handshake, unmasked text frames out, masked frames in, close
-// and ping/pong control frames. No binary, no fragmentation, no compression.
-//
-// Keeping it in-tree avoids adding a websocket dependency for what is a
-// few dozen lines of straightforward protocol work.
+// Hand-rolled RFC6455 helpers, kept in-tree rather than a dependency: handshake,
+// unmasked text and binary frames out (JSON, a plugin terminal's raw bytes),
+// masked frames in, close and ping/pong. No fragmentation, no compression.
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // Opcodes we care about.
 const (
-	wsOpText  = 0x1
-	wsOpClose = 0x8
-	wsOpPing  = 0x9
-	wsOpPong  = 0xA
+	wsOpText   = 0x1
+	wsOpBinary = 0x2
+	wsOpClose  = 0x8
+	wsOpPing   = 0x9
+	wsOpPong   = 0xA
 )
 
 // maxWSFrameBytes caps a single inbound frame payload: the client declares the
@@ -148,6 +145,12 @@ func wsUpgrade(w http.ResponseWriter, r *http.Request) (*wsConn, error) {
 // WriteText sends a single unfragmented text frame.
 func (c *wsConn) WriteText(payload []byte) error {
 	return c.writeFrame(wsOpText, payload)
+}
+
+// WriteBinary sends a single unfragmented binary frame, for bytes that need
+// not be valid UTF-8, such as a terminal's output cut mid-character.
+func (c *wsConn) WriteBinary(payload []byte) error {
+	return c.writeFrame(wsOpBinary, payload)
 }
 
 // WritePing sends a ping frame so the server can probe whether a silent client

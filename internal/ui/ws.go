@@ -181,6 +181,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	ch := broker.add()
 	defer broker.remove(ch)
+	// Plugin terminals live as long as some dashboard window does.
+	dashboardOpened()
+	defer dashboardClosed()
 
 	// Force-refresh the container cache and invalidate all snapshot kinds so
 	// the first frame always reflects current container state, not a cached
