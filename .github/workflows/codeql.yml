@@ -4,7 +4,6 @@ on:
   push:
     branches: ["main", "release/**"]
   pull_request:
-    branches: ["main", "release/**"]
   schedule:
     - cron: '0 6 * * 1'
 
