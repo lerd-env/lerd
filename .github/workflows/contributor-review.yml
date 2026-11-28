@@ -1,0 +1,30 @@
+name: Contributor Review
+
+# pull_request_target so fork PRs get a token that can request reviewers; it never checks out PR code.
+on:
+  pull_request_target:
+    branches: ["main", "release/**"]
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request:
+    name: Request contributors review
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      # Requested as reviewers, not code owners, so a contributor approval never satisfies the code owner gate.
+      - name: Request review from lerd-env/contributors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          teams=$(gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR/requested_reviewers" \
+            -f 'team_reviewers[]=contributors' --jq '[.requested_teams[].slug] | join(",")')
+          echo "requested teams: $teams"
+          case ",$teams," in
+            *,contributors,*) ;;
+            *) echo "::error::contributors team was not added as a reviewer"; exit 1 ;;
+          esac
