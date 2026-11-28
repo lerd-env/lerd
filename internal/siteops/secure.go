@@ -7,8 +7,8 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/plugins"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // Indirection points so tests can swap in inert stubs without touching mkcert,
@@ -17,7 +17,7 @@ var (
 	secureCertFn   = certs.SecureSite
 	unsecureCertFn = certs.UnsecureSite
 	reissueCertFn  = certs.ReissueCertForWorktree
-	nginxReloadFn  = nginx.Reload
+	nginxReloadFn  = webserver.Reload
 	notifyDaemonFn = defaultNotifyDaemon
 )
 

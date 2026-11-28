@@ -31,7 +31,6 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/plugins"
@@ -43,6 +42,7 @@ import (
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/watcher"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -527,7 +527,7 @@ func newWatchCmd() *cobra.Command {
 			}()
 
 			// Ensure the catch-all default vhost is always present.
-			if err := nginx.EnsureDefaultVhost(); err != nil {
+			if err := webserver.EnsureDefaultSite(); err != nil {
 				fmt.Printf("[WARN] default vhost: %v\n", err)
 			}
 
@@ -591,7 +591,7 @@ func newWatchCmd() *cobra.Command {
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "added", false) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
@@ -602,7 +602,7 @@ func newWatchCmd() *cobra.Command {
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "changed", true) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 							eventbus.Default.Publish(eventbus.KindSites)
@@ -633,7 +633,7 @@ func newWatchCmd() *cobra.Command {
 							}
 						}
 						if cleanupWorktreeVhosts(site) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
@@ -795,12 +795,8 @@ func newWatchCmd() *cobra.Command {
 									fmt.Printf("PHP version changed for %s: %s -> %s\n", site.Name, site.PHPVersion, detected)
 									site.PHPVersion = detected
 									siteChanged = true
-									if site.Secured {
-										_ = nginx.GenerateSSLVhost(*site, detected)
-									} else {
-										_ = nginx.GenerateVhost(*site, detected)
-									}
-									if err := nginx.Reload(); err != nil {
+									_ = webserver.ApplySite(*site)
+									if err := webserver.Reload(); err != nil {
 										fmt.Printf("[WARN] nginx reload after php version change for %s: %v\n", site.Name, err)
 									}
 								}
@@ -850,7 +846,7 @@ func newWatchCmd() *cobra.Command {
 				if err != nil {
 					fmt.Printf("[WARN] registering %s: %v\n", projectPath, err)
 				} else if registered {
-					if err := nginx.Reload(); err != nil {
+					if err := webserver.Reload(); err != nil {
 						fmt.Printf("[WARN] nginx reload: %v\n", err)
 					}
 					eventbus.Default.Publish(eventbus.KindSites)
@@ -964,7 +960,7 @@ func bootScan(cfg *config.GlobalConfig) {
 	}
 
 	if reloadNeeded {
-		if err := nginx.Reload(); err != nil {
+		if err := webserver.Reload(); err != nil {
 			fmt.Printf("[WARN] nginx reload: %v\n", err)
 		}
 	}
@@ -1094,7 +1090,7 @@ func scanWorktrees() ([]func(), bool) {
 				// name that version's FPM container or the branch is served by
 				// the parent's PHP.
 				effectivePHP := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
-				if err := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
+				if err := webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 					fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, err)
 					continue
 				}
@@ -1245,7 +1241,7 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 			return true
 		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
-		vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured)
+		vhostErr := webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured)
 		if site.Secured {
 			if reissueErr := certs.ReissueCertForWorktree(*site); reissueErr != nil {
 				fmt.Printf("[WARN] reissue cert for worktree %s: %v\n", wt.Domain, reissueErr)

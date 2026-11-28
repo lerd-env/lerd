@@ -49,7 +49,7 @@ When serving a request, Lerd picks the PHP version for a project in this order:
 
 Once a project is linked, that order is what lerd detects with, not what it runs. Linking clamps the detected version to the range the framework supports and stores the result in the site registry, and everything scoped to the site afterwards, the vhost, `lerd console`, `lerd php`, tinker, the workers and `lerd logs`, uses the stored version. So a project pinned to a version its framework does not support is served by the clamped one, and the pin only takes effect once it falls inside the range. A worktree inherits its parent site's version unless its own `.lerd.yaml` overrides it.
 
-When `.php-version` changes on disk, the lerd watcher automatically updates the site registry and regenerates the nginx vhost, no manual reload needed.
+When `.php-version` changes on disk, the lerd watcher automatically updates the site registry and regenerates the nginx vhost, no manual reload needed. A secured site gets the HTTPS vhost it is served from rewritten, rather than a second one beside it.
 
 To pin a project permanently:
 

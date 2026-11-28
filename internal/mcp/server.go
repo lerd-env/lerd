@@ -25,7 +25,6 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
-	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -37,6 +36,7 @@ import (
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tools"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
 )
@@ -1200,7 +1200,7 @@ func execStatus() (any, *rpcError) {
 	var r result
 	r.DNS.TLD = tld
 	r.DNS.OK, _ = dns.Check(tld)
-	r.Nginx.Running, _ = podman.ContainerRunning("lerd-nginx")
+	r.Nginx.Running, _ = podman.ContainerRunning(podman.WebServerUnit)
 	r.Watcher.Running = exec.Command("systemctl", "--user", "is-active", "--quiet", "lerd-watcher").Run() == nil
 
 	versions, _ := phpDet.ListInstalled()
@@ -4188,17 +4188,10 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 		}
 		_ = config.SetProjectRuntime(site.Path, "", false)
 		siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
-		if site.Secured {
-			if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
-				return toolErr("regenerating SSL vhost: " + err.Error()), nil
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return toolErr("installing SSL vhost: " + err.Error()), nil
-			}
-		} else if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
+		if err := webserver.ApplySite(*site); err != nil {
 			return toolErr("regenerating vhost: " + err.Error()), nil
 		}
-		_ = nginx.Reload()
+		_ = webserver.Reload()
 		return toolOK(fmt.Sprintf("%s: runtime set to fpm", siteName)), nil
 	}
 

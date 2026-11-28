@@ -16,10 +16,10 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nativephp"
-	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // NewPHPRuntimeCmd returns the `lerd php:runtime` command.
@@ -267,7 +267,7 @@ func ApplyPHPRuntime(mode string) error {
 	// site answers 502 while the switch reports success. One unloadable
 	// certificate anywhere is enough to cause it, so say so rather than
 	// swallowing it.
-	if err := nginx.Reload(); err != nil {
+	if err := webserver.Reload(); err != nil {
 		feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
 	}
 
@@ -358,7 +358,7 @@ func versionsInUse(installed []string) []string {
 // Seams for the worktree sweep, so the switch can be tested without git or nginx.
 var (
 	switchWorktreesFor       = gitpkg.DetectWorktrees
-	switchWriteWorktreeVhost = nginx.GenerateWorktreeVhostFor
+	switchWriteWorktreeVhost = webserver.ApplyWorktree
 )
 
 // regenerateWorktreeVhosts rewrites the vhost of every worktree a site has. A
@@ -380,19 +380,13 @@ func regenerateWorktreeVhosts(s *config.Site) {
 // regenerateProfilerVhost rewrites the SPX dashboard's vhost, which belongs to
 // no site, so the sweep over sites never reaches it.
 func regenerateProfilerVhost() {
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		feedback.Warn("regenerating the profiler vhost: %v (the SPX dashboard may answer 502)", err)
 	}
 }
 
 func regenerateSiteVhost(s *config.Site) error {
-	if s.Secured {
-		if err := nginx.GenerateSSLVhost(*s, s.PHPVersion); err != nil {
-			return err
-		}
-		return nginx.InstallSSLVhost(s.PrimaryDomain())
-	}
-	return nginx.GenerateVhost(*s, s.PHPVersion)
+	return webserver.ApplySite(*s)
 }
 
 // envCommandFor builds the `lerd env` invocation for a site, rooted at its

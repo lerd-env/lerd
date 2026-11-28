@@ -43,7 +43,6 @@ import (
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/lanip"
 	"github.com/geodro/lerd/internal/nativephp"
-	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/phpsets"
@@ -61,6 +60,7 @@ import (
 	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
 )
@@ -879,7 +879,7 @@ func buildStatus() StatusResponse {
 	}
 
 	dnsStatus := dns.CheckStatus(tld)
-	nginxRunning := podman.Cache.Running("lerd-nginx")
+	nginxRunning := podman.Cache.Running(podman.WebServerUnit)
 	watcherRunning := services.Mgr.IsActive("lerd-watcher")
 
 	versions, _ := phpPkg.InstalledForRuntime()
@@ -928,7 +928,7 @@ func buildStatus() StatusResponse {
 	}
 	return StatusResponse{
 		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, "lerd-nginx", podman.NginxUpdateAvailable)},
+		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, podman.WebServerUnit, podman.NginxUpdateAvailable)},
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,
@@ -4952,7 +4952,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
-		_ = nginx.Reload()
+		_ = webserver.Reload()
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	default:
@@ -5054,7 +5054,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if needsReload {
-		if err := nginx.Reload(); err != nil {
+		if err := webserver.Reload(); err != nil {
 			writeJSON(w, SiteActionResponse{Error: "reloading nginx: " + err.Error()})
 			return
 		}

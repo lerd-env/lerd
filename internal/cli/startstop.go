@@ -19,7 +19,6 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
@@ -27,6 +26,7 @@ import (
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/shims"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -319,11 +319,11 @@ func CollectPortChecks(units []string) []PortCheck {
 	var checks []PortCheck
 
 	// Nginx ports (configurable).
-	if unitSet["lerd-nginx"] {
+	if unitSet[podman.WebServerUnit] {
 		httpPort, httpsPort := config.NginxPorts()
 		checks = append(checks,
-			PortCheck{strconv.Itoa(httpPort), "nginx HTTP", "lerd-nginx"},
-			PortCheck{strconv.Itoa(httpsPort), "nginx HTTPS", "lerd-nginx"},
+			PortCheck{strconv.Itoa(httpPort), "nginx HTTP", podman.WebServerUnit},
+			PortCheck{strconv.Itoa(httpsPort), "nginx HTTPS", podman.WebServerUnit},
 		)
 	}
 
@@ -620,7 +620,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	skip = append(skip, noImage...)
 
 	// Rewrite nginx.conf so any config changes in new binary versions take effect.
-	if err := nginx.EnsureNginxConfig(); err != nil {
+	if err := webserver.EnsureConfig(); err != nil {
 		fmt.Printf("  WARN: nginx config: %v\n", err)
 	}
 	// The quadlet carries the host ports nginx publishes, so a start has to
@@ -628,18 +628,18 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	// nginx keeps the mapping it was created with, so writing the unit alone
 	// leaves a moved nginx.http_port unapplied until something else restarts
 	// it (#1544).
-	if quadletChanged, err := nginx.RewriteNginxQuadlet(); err != nil {
+	if quadletChanged, err := webserver.RewriteUnit(); err != nil {
 		fmt.Printf("  WARN: nginx quadlet: %v\n", err)
 	} else if quadletChanged {
 		_ = podman.DaemonReloadFn()
-		if err := podman.RestartUnit("lerd-nginx"); err != nil {
+		if err := podman.RestartUnit(podman.WebServerUnit); err != nil {
 			fmt.Printf("  WARN: restarting nginx on the new ports: %v\n", err)
 		}
 	}
-	if err := nginx.EnsureLerdVhost(); err != nil {
+	if err := webserver.EnsureDashboard(); err != nil {
 		fmt.Printf("  WARN: lerd vhost: %v\n", err)
 	}
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		fmt.Printf("  WARN: profiler vhost: %v\n", err)
 	}
 	// The lerd-nginx quadlet bind-mounts RunDir so the lerd.localhost vhost
@@ -681,7 +681,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	}
 
 	// Pre-flight: repair SSL vhosts with missing cert files so nginx can start.
-	if repairs := nginx.RepairVhosts(); len(repairs) > 0 {
+	if repairs := webserver.RepairSites(); len(repairs) > 0 {
 		for _, r := range repairs {
 			switch r.Reason {
 			case "missing-cert":
@@ -694,8 +694,8 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Reload nginx if it is already running so regenerated base vhosts (the
 	// dashboard and profiler vhosts) take effect without a full restart.
-	if running, _ := podman.ContainerRunning("lerd-nginx"); running {
-		_ = nginx.Reload()
+	if running, _ := podman.ContainerRunning(podman.WebServerUnit); running {
+		_ = webserver.Reload()
 	}
 
 	// Phase 1: start all infrastructure (containers, FPM, custom containers,

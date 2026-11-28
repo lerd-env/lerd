@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 func stubWakeHold(t *testing.T, asleepPolls int) (pinged *[]string) {
@@ -39,7 +39,7 @@ func stubWakeHold(t *testing.T, asleepPolls int) (pinged *[]string) {
 }
 
 func wakeRequest(host, uri string) *httptest.ResponseRecorder {
-	return wakeRequestWith(httptest.NewRequest(http.MethodGet, nginx.WakeHoldPath, nil), host, uri)
+	return wakeRequestWith(httptest.NewRequest(http.MethodGet, webserver.WakeHoldPath, nil), host, uri)
 }
 
 func wakeRequestWith(r *http.Request, host, uri string) *httptest.ResponseRecorder {
@@ -80,7 +80,7 @@ func TestWakeHold_replaysTheRequestToTheWokenSite(t *testing.T) {
 	pinged := stubWakeHold(t, 3)
 	got := fakeNginx(t, http.StatusCreated, `{"ok":true}`)
 
-	r := httptest.NewRequest(http.MethodPost, nginx.WakeHoldPath, strings.NewReader(`{"event":"paid"}`))
+	r := httptest.NewRequest(http.MethodPost, webserver.WakeHoldPath, strings.NewReader(`{"event":"paid"}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := wakeRequestWith(r, "shop.test", "/webhooks/stripe?x=1")
 
@@ -111,7 +111,7 @@ func TestWakeHold_passesTheAppsErrorsThrough(t *testing.T) {
 
 func TestWakeHold_redirectsAWebsocketUpgrade(t *testing.T) {
 	stubWakeHold(t, 0)
-	r := httptest.NewRequest(http.MethodGet, nginx.WakeHoldPath, nil)
+	r := httptest.NewRequest(http.MethodGet, webserver.WakeHoldPath, nil)
 	r.Header.Set("Upgrade", "websocket")
 	w := wakeRequestWith(r, "shop.test", "/ws")
 	if w.Code != http.StatusTemporaryRedirect || w.Header().Get("Location") != "/ws" {
@@ -150,7 +150,7 @@ func TestWakeHold_refusesAnythingButARelativePathOnAKnownSite(t *testing.T) {
 // must not reach a site that LAN access keeps private; only nginx may hand over.
 func TestWakeHold_refusesAPeerThatIsNotTheHost(t *testing.T) {
 	pinged := stubWakeHold(t, 0)
-	r := httptest.NewRequest(http.MethodGet, nginx.WakeHoldPath, nil)
+	r := httptest.NewRequest(http.MethodGet, webserver.WakeHoldPath, nil)
 	r.RemoteAddr = "203.0.113.7:51000"
 	if w := wakeRequestWith(r, "shop.test", "/"); w.Code != http.StatusForbidden {
 		t.Fatalf("got %d, want %d", w.Code, http.StatusForbidden)
@@ -164,7 +164,7 @@ func TestWakeHold_refusesAPeerThatIsNotTheHost(t *testing.T) {
 // falls back to the waking page instead of replaying forever.
 func TestWakeHold_neverReplaysAReplay(t *testing.T) {
 	stubWakeHold(t, 0)
-	r := httptest.NewRequest(http.MethodGet, nginx.WakeHoldPath, nil)
+	r := httptest.NewRequest(http.MethodGet, webserver.WakeHoldPath, nil)
 	r.Header.Set(wakeHoldReplayed, "1")
 	if w := wakeRequestWith(r, "shop.test", "/"); w.Code != wakeHoldFailed {
 		t.Fatalf("got %d, want %d", w.Code, wakeHoldFailed)
@@ -195,7 +195,7 @@ func TestSiteVhostWaking_waitsForTheReloadAfterTheRestore(t *testing.T) {
 	}
 	now := time.Now()
 
-	write("location / { proxy_pass http://unix:x:"+nginx.WakeHoldPath+"; }", now)
+	write("location / { proxy_pass http://unix:x:"+webserver.WakeHoldPath+"; }", now)
 	reloadAt(now)
 	if !siteVhostWaking("shop.test") {
 		t.Fatal("a waking vhost must hold")

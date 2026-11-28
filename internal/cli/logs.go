@@ -63,7 +63,7 @@ func resolveLogsTarget(args []string) (string, error) {
 
 	// nginx
 	if target == "nginx" {
-		return "lerd-nginx", nil
+		return podman.WebServerUnit, nil
 	}
 
 	// known service name

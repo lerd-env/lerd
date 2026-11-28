@@ -12,8 +12,8 @@ import (
 	lerdcli "github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/lanip"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/platform"
+	"github.com/geodro/lerd/internal/webserver"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -708,7 +708,7 @@ func hasValidTrustToken(r *http.Request) bool {
 	if claimed == "" {
 		return false
 	}
-	token, err := nginx.LoadOrGenerateTrustToken()
+	token, err := webserver.LoadOrGenerateTrustToken()
 	return err == nil && token != "" &&
 		subtle.ConstantTimeCompare([]byte(claimed), []byte(token)) == 1
 }

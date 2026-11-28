@@ -14,8 +14,8 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // The seams the domain flow talks to the rest of the machine through, swapped
@@ -25,11 +25,11 @@ var (
 	domainIssueCertFn = func(domain string) error {
 		return certs.IssueCert(domain, []string{domain}, filepath.Join(config.CertsDir(), "sites"))
 	}
-	domainVhostFn       = nginx.GenerateServiceProxyVhost
+	domainVhostFn       = webserver.ApplyService
 	domainRemoveCertFn  = certs.RemoveSiteCerts
-	domainRemoveVhostFn = nginx.RemoveVhost
+	domainRemoveVhostFn = webserver.RemoveSite
 	domainWriteHostsFn  = podman.WriteContainerHosts
-	domainReloadFn      = nginx.Reload
+	domainReloadFn      = webserver.Reload
 	domainWaitServedFn  = waitDomainServed
 )
 
@@ -179,7 +179,7 @@ func removeServiceDomain(service string, optOut bool) error {
 // what matters here; whoever starts nginx next reads it, and failing the command
 // would report a domain as unset when it is written and will serve on start.
 func reloadNginxIfRunning() error {
-	if err := domainReloadFn(); err != nil && !errors.Is(err, nginx.ErrNotRunning) {
+	if err := domainReloadFn(); err != nil && !errors.Is(err, webserver.ErrNotRunning) {
 		return err
 	}
 	return nil

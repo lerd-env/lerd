@@ -8,6 +8,8 @@ The FrankenPHP runtime is opt-in, framework-agnostic, and coexists with the defa
 
 ## Switching runtime
 
+A FrankenPHP site keeps proxying to its own container whenever its vhost is rewritten: adding or removing a domain, toggling a page plugin or changing its PHP version never points it at a shared PHP-FPM pool.
+
 Two equivalent ways to turn FrankenPHP on for a site.
 
 **From `.lerd.yaml`** (commits the choice to the repo, so everyone who links the project gets the same runtime):

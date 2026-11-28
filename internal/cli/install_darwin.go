@@ -50,8 +50,8 @@ func ensureLoopbackRedirect() {
 
 // Vars so tests can stand in for podman.
 var (
-	nginxRunningFn = func() bool { r, _ := podman.ContainerRunning("lerd-nginx"); return r }
-	stopNginxFn    = func() error { return podman.StopUnit("lerd-nginx") }
+	nginxRunningFn = func() bool { r, _ := podman.ContainerRunning(podman.WebServerUnit); return r }
+	stopNginxFn    = func() error { return podman.StopUnit(podman.WebServerUnit) }
 	nginxWideFn    = nginxPublishesWide
 )
 
@@ -82,7 +82,7 @@ func nginxPublishesWide() bool {
 	if cfg, err := config.LoadGlobal(); err != nil || cfg == nil || cfg.LAN.Exposed {
 		return true
 	}
-	wide, err := podman.UnitLoopbackPortsPublishedWide("lerd-nginx")
+	wide, err := podman.UnitLoopbackPortsPublishedWide(podman.WebServerUnit)
 	return err != nil || len(wide) > 0
 }
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // A group main serves "<main> *.<main>". nginx prefers an exact server_name over
@@ -41,7 +41,7 @@ func securedMainOf(site *config.Site) *config.Site {
 // benign here: SetSecured has already written the cert, vhost and registry, and
 // the config is what the next start reads.
 func secureSecondary(s *config.Site) error {
-	if err := SetSecured(s, true); err != nil && !errors.Is(err, nginx.ErrNotRunning) {
+	if err := SetSecured(s, true); err != nil && !errors.Is(err, webserver.ErrNotRunning) {
 		return err
 	}
 	return nil

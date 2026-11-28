@@ -19,7 +19,6 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
@@ -32,6 +31,7 @@ import (
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tray"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -95,7 +95,7 @@ func ok()               { fmt.Println(feedback.Green("✓")) }
 // dnsmasq, and the macOS gvproxy forward are not reported as conflicts.
 func portPreflightConflicts(portList string, containerRunning func(string) bool, dnsAnswering func() bool) []PortCheck {
 	var conflicts []PortCheck
-	for _, c := range CollectPortChecks([]string{"lerd-nginx", "lerd-dns"}) {
+	for _, c := range CollectPortChecks([]string{podman.WebServerUnit, "lerd-dns"}) {
 		if isPortConflict(c, portList, containerRunning, dnsAnswering) {
 			conflicts = append(conflicts, c)
 		}
@@ -151,7 +151,7 @@ func nginxStartError(startErr error, conflicts []PortCheck, holder string) error
 	}
 	var ports []string
 	for _, c := range conflicts {
-		if c.Container == "lerd-nginx" {
+		if c.Container == podman.WebServerUnit {
 			ports = append(ports, c.Port)
 		}
 	}
@@ -581,16 +581,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	// 6. Nginx
 	step("Writing nginx configuration")
-	if err := nginx.EnsureNginxConfig(); err != nil {
+	if err := webserver.EnsureConfig(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureDefaultVhost(); err != nil {
+	if err := webserver.EnsureDefaultSite(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureLerdVhost(); err != nil {
+	if err := webserver.EnsureDashboard(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		return err
 	}
 	// The lerd-nginx quadlet bind-mounts RunDir so the lerd.localhost vhost
@@ -614,66 +614,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	step("Regenerating vhosts")
 	reg, err := config.LoadSites()
 	if err == nil {
-		cfg, _ := config.LoadGlobal()
 		for _, site := range reg.Sites {
 			// Skip paused and ignored sites — they have their own vhosts
 			// (landing page or none) that should not be overwritten.
 			if site.Paused || site.Ignored {
 				continue
 			}
-			switch {
-			case site.IsHostProxy():
-				if site.Secured {
-					if err := nginx.GenerateHostProxySSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateHostProxyVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			case site.IsCustomContainer():
-				if site.Secured {
-					if err := nginx.GenerateCustomSSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateCustomVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			case site.IsFrankenPHP():
-				if site.Secured {
-					if err := nginx.GenerateFrankenPHPSSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			default:
-				phpVer := site.PHPVersion
-				if phpVer == "" && cfg != nil {
-					phpVer = cfg.PHP.DefaultVersion
-				}
-				if site.Secured {
-					if err := nginx.GenerateSSLVhost(site, phpVer); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateVhost(site, phpVer); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
+			if err := webserver.ApplySite(site); err != nil {
+				fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
 			}
 		}
 		rewakeSleepingSites(reg.Sites)
@@ -723,7 +671,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	step("Writing nginx quadlet")
-	if err := rewriteEmbedded("lerd-nginx"); err != nil {
+	if err := rewriteEmbedded(podman.WebServerUnit); err != nil {
 		return err
 	}
 	ok()
@@ -827,7 +775,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// lerd-dns; doing pulls first ensures the system DNS is intact for all
 	// registry traffic (docker.io, ghcr.io, etc.).
 	// The nginx image is declared once, in the quadlet template.
-	nginxImage := podman.ServiceImage("lerd-nginx")
+	nginxImage := podman.ServiceImage(podman.WebServerUnit)
 	pullJobs := []BuildJob{
 		{
 			Label: "Pulling " + nginxImage,
@@ -876,7 +824,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// actually changed during this install run, EXCEPT lerd-nginx /
 	// lerd-dns (handled separately) and anything we just started above.
 	for _, name := range changedQuadlets {
-		if name == "lerd-nginx" || name == "lerd-dns" || migratedSet[name] {
+		if name == podman.WebServerUnit || name == "lerd-dns" || migratedSet[name] {
 			continue
 		}
 		if running, _ := podman.ContainerRunning(name); !running {
@@ -922,17 +870,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	var nginxErr error
 	if autostartOn || nginxRestartOwed {
-		running, _ := podman.ContainerRunning("lerd-nginx")
-		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
+		running, _ := podman.ContainerRunning(podman.WebServerUnit)
+		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, podman.WebServerUnit), podman.ContainerImageID(podman.WebServerUnit), podman.LocalImageID(nginxImage)) {
 			step("Starting lerd-nginx")
-			if nginxErr = services.Mgr.Restart("lerd-nginx"); nginxErr != nil {
+			if nginxErr = services.Mgr.Restart(podman.WebServerUnit); nginxErr != nil {
 				fmt.Printf("    WARN: %v\n", nginxErr)
 			} else {
 				ok()
 			}
 		} else {
 			step("Reloading lerd-nginx")
-			if err := nginx.Reload(); err != nil {
+			if err := webserver.Reload(); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
 			} else {
 				ok()
@@ -2109,7 +2057,7 @@ func defaultPresetsToRefresh(names []string, installed func(unit string) bool, k
 // nginxPortHolder names the first process found on one of lerd-nginx's busy ports.
 func nginxPortHolder(conflicts []PortCheck) string {
 	for _, c := range conflicts {
-		if c.Container != "lerd-nginx" {
+		if c.Container != podman.WebServerUnit {
 			continue
 		}
 		if h := PortHolder(c.Port); h != "" {

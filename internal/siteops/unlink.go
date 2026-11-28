@@ -8,10 +8,10 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/reqstats"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // IsParkedSite checks whether a site's path is inside one of the parked directories.
@@ -72,7 +72,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 	}
 	StopSiteShares(site.Name)
 
-	_ = nginx.RemoveVhost(site.PrimaryDomain())
+	_ = webserver.RemoveSite(site.PrimaryDomain())
 	// The site's worktrees are served by subdomain vhosts of their own, and
 	// they go with it: a branch of a site lerd no longer knows about has
 	// nothing left to serve.
@@ -129,7 +129,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 func FinishSiteRemoval() error {
 	_ = podman.WriteContainerHosts()
 	_ = podman.RewriteFPMQuadlets()
-	return nginx.ReloadAndSettle()
+	return webserver.ReloadAndSettle()
 }
 
 // forgetSiteState drops the per-site request-timing and idle state the watcher

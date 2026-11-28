@@ -7,62 +7,25 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
-// RegenerateSiteVhost regenerates the nginx vhost for a site after domain changes.
-// If the primary domain changed, the old vhost file is removed. For secured sites
-// the SSL vhost is generated and renamed to the main .conf path. Every caller that
-// changes a site's domains comes through here, so it is also where a running dev
-// server is realigned with them.
+// RegenerateSiteVhost rewrites a site's vhost after its domains change, dropping
+// the old primary's. Every domain change comes through here, so it is also where
+// a running dev server is realigned with them.
 func RegenerateSiteVhost(site *config.Site, oldPrimary string) error {
 	newPrimary := site.PrimaryDomain()
 
 	if oldPrimary != newPrimary {
-		_ = nginx.RemoveVhost(oldPrimary)
+		_ = webserver.RemoveSite(oldPrimary)
 		if err := MoveCustomNginxConfig(oldPrimary, newPrimary); err != nil {
 			fmt.Fprintf(os.Stderr, "lerd: migrating custom nginx override to %s: %v\n", newPrimary, err)
 		}
 	}
 
-	if site.IsHostProxy() {
-		if site.Secured {
-			if err := nginx.GenerateHostProxySSLVhost(*site); err != nil {
-				return fmt.Errorf("generating host-proxy SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(newPrimary); err != nil {
-				return fmt.Errorf("installing host-proxy SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateHostProxyVhost(*site); err != nil {
-				return fmt.Errorf("generating host-proxy vhost: %w", err)
-			}
-		}
-	} else if site.IsCustomContainer() {
-		if site.Secured {
-			if err := nginx.GenerateCustomSSLVhost(*site); err != nil {
-				return fmt.Errorf("generating custom SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(newPrimary); err != nil {
-				return fmt.Errorf("installing custom SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateCustomVhost(*site); err != nil {
-				return fmt.Errorf("generating custom vhost: %w", err)
-			}
-		}
-	} else if site.Secured {
-		if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
-			return fmt.Errorf("generating SSL vhost: %w", err)
-		}
-		if err := nginx.InstallSSLVhost(newPrimary); err != nil {
-			return fmt.Errorf("installing SSL vhost: %w", err)
-		}
-	} else {
-		if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
-			return fmt.Errorf("generating vhost: %w", err)
-		}
+	if err := webserver.ApplySite(*site); err != nil {
+		return fmt.Errorf("writing vhost: %w", err)
 	}
 	// A dev server serving under this vhost has the site's domains baked into the
 	// config it was started with, so it follows the vhost that just moved.

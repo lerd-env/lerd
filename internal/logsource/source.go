@@ -273,7 +273,7 @@ func workerSource(site *config.Site, worker string) Source {
 // staticGlobals are the fixed infrastructure sources present on every machine.
 func staticGlobals() []Source {
 	return []Source{
-		{Name: "nginx", Kind: KindPodman, Locator: "lerd-nginx", Scope: ScopeGlobal, Label: "nginx"},
+		{Name: "nginx", Kind: KindPodman, Locator: podman.WebServerUnit, Scope: ScopeGlobal, Label: "nginx"},
 		{Name: "dns", Kind: KindJournal, Locator: "lerd-dns", Scope: ScopeGlobal, Label: "DNS server"},
 		{Name: "watcher", Kind: KindJournal, Locator: "lerd-watcher", Scope: ScopeGlobal, Label: "file watcher"},
 		{Name: "ui", Kind: KindJournal, Locator: "lerd-ui", Scope: ScopeGlobal, Label: "lerd UI server"},

@@ -19,9 +19,9 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // ComputeSecondaryDomain returns the domain a secondary occupies on the group
@@ -441,7 +441,7 @@ var regenerateSecondary = func(secondary *config.Site, oldPrimary string) error 
 		return err
 	}
 	_ = podman.WriteContainerHosts()
-	if err := nginx.Reload(); err != nil && !errors.Is(err, nginx.ErrNotRunning) {
+	if err := webserver.Reload(); err != nil && !errors.Is(err, webserver.ErrNotRunning) {
 		fmt.Fprintf(os.Stderr, "lerd: reloading nginx: %v\n", err)
 	}
 	if err := siteops.SyncEnvIfPrimaryChanged(secondary, oldPrimary); err != nil {

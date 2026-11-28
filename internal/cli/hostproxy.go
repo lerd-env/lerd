@@ -18,10 +18,10 @@ import (
 	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/linker"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 func init() {
@@ -34,7 +34,7 @@ func init() {
 			return nil
 		}
 		port := WorktreeHostPort(site.Name, proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
-		return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, secured)
+		return webserver.ApplyHostProxyWorktree(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, secured)
 	}
 }
 
@@ -63,7 +63,7 @@ func RegenerateHostProxyVhostsOnGatewayChange() {
 }
 
 // hostProxyNginxReload is the nginx reload the gateway passes use, a seam for tests.
-var hostProxyNginxReload = nginx.Reload
+var hostProxyNginxReload = webserver.Reload
 
 // RepointStaleHostProxySites repoints each host-proxy site whose vhost or running
 // dev server is on another address than the hosts file, which lerd start and link
@@ -660,7 +660,7 @@ func GenerateHostProxyWorktreeVhost(site config.Site, wtPath, wtDomain string) e
 		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
 	}
 	port := WorktreeHostPort(site.Name, proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
-	return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured)
+	return webserver.ApplyHostProxyWorktree(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured)
 }
 
 // StartHostProxyWorktreeServer supervises the parent's dev command from the

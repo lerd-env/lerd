@@ -262,7 +262,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 
 	if quadletChanged {
 		_ = podman.DaemonReloadFn()
-		restartErr := podman.RestartUnit("lerd-nginx")
+		restartErr := podman.RestartUnit(podman.WebServerUnit)
 		if restartErr == nil {
 			// RestartUnit returning nil only means systemd issued the restart,
 			// not that nginx accepted the edited config. The container now
@@ -279,7 +279,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 				// can flash "active" mid-loop, fooling the readiness probe).
 				// Roll back on either; a neighbour's broken vhost on a healthy,
 				// running container is left alone, matching the reload path.
-				if running, _ := podman.ContainerRunning("lerd-nginx"); !running || cfgedit.MentionsFile(out, f.Path) {
+				if running, _ := podman.ContainerRunning(podman.WebServerUnit); !running || cfgedit.MentionsFile(out, f.Path) {
 					restartErr = errors.New("invalid config: " + out)
 				}
 			}
@@ -290,7 +290,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			_ = nginx.EnsureNginxConfig()
-			if rb2Err := podman.RestartUnit("lerd-nginx"); rb2Err != nil {
+			if rb2Err := podman.RestartUnit(podman.WebServerUnit); rb2Err != nil {
 				writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx config invalid and rollback restart failed: " + rb2Err.Error() + " (original: " + restartErr.Error() + ")"})
 				return
 			}

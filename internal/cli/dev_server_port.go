@@ -11,9 +11,9 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/freeport"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // Seams for tests. devServerPortWait is how long a stopped server's own process
@@ -35,8 +35,8 @@ var (
 		if err := siteops.RegenerateSiteVhost(site, site.PrimaryDomain()); err != nil {
 			return err
 		}
-		if up, _ := podman.ContainerRunning("lerd-nginx"); up {
-			return nginx.Reload()
+		if up, _ := podman.ContainerRunning(podman.WebServerUnit); up {
+			return webserver.Reload()
 		}
 		return nil
 	}

@@ -15,9 +15,9 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // A host dev server normally advertises its own address, so everything it
@@ -246,8 +246,8 @@ func regenSiteOrWorktreeVhost(site *config.Site, sitePath string) {
 	if resolved, err := phpVersionForDir(sitePath); err == nil && resolved != "" {
 		phpVer = resolved
 	}
-	if err := nginx.GenerateWorktreeVhostFor(wt.Domain, sitePath, phpVer, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured); err == nil {
-		_ = nginx.Reload()
+	if err := webserver.ApplyWorktree(wt.Domain, sitePath, phpVer, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured); err == nil {
+		_ = webserver.Reload()
 	}
 }
 
