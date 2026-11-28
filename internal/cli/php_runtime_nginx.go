@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/webserver"
@@ -32,8 +34,8 @@ var (
 // moveWebServer takes nginx along when a runtime switch changes where it runs,
 // reporting it so the caller restarts rather than reloads. Everything else is
 // rewritten first, so the nginx that starts reads nothing meant for its old home.
-func moveWebServer(wasOnHost bool, sites []config.Site) bool {
-	if moveOnHostFn() == wasOnHost {
+func moveWebServer(moved bool, sites []config.Site) bool {
+	if !moved {
 		return false
 	}
 	if moveOnHostFn() {
@@ -77,6 +79,37 @@ func rewriteUnmovedConfigs(sites []config.Site) {
 			if err := webserver.ApplySite(*s); err != nil {
 				feedback.Warn("rewriting the vhost for %s: %v", s.Name, err)
 			}
+		}
+		rewriteUnmovedWorktrees(*s)
+	}
+}
+
+var (
+	unmovedWorktreesFn         = gitpkg.DetectWorktrees
+	unmovedPausedWorktreeFn    = webserver.ApplyPausedWorktree
+	unmovedHostProxyWorktreeFn = func(s config.Site, path, domain string, secured bool) error {
+		return certs.RegenerateHostProxyWorktreeVhost(s, path, domain, secured)
+	}
+)
+
+// rewriteUnmovedWorktrees rewrites the worktrees of a site the switch skipped
+// in the site's own form, paused or proxied.
+func rewriteUnmovedWorktrees(s config.Site) {
+	if !s.Paused && !s.IsHostProxy() {
+		return
+	}
+	wts, err := unmovedWorktreesFn(s.Path, s.PrimaryDomain())
+	if err != nil {
+		return
+	}
+	for _, wt := range wts {
+		if s.Paused {
+			err = unmovedPausedWorktreeFn(wt.Domain, s.PrimaryDomain(), config.PausedDir(), s.Secured)
+		} else {
+			err = unmovedHostProxyWorktreeFn(s, wt.Path, wt.Domain, s.Secured)
+		}
+		if err != nil {
+			feedback.Warn("rewriting the vhost for worktree %s: %v", wt.Domain, err)
 		}
 	}
 }

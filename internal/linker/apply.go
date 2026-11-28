@@ -101,6 +101,9 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 		}
 	}
 
+	if err := webserver.RefuseContainerSite(plan.Site); err != nil {
+		return res, err
+	}
 	// Carry a re-link's HTTPS over and drop registrations the rename stranded.
 	// Resolve already read the secured half; this is the removal.
 	siteops.CleanupRelink(plan.Dir, plan.Site.Name)

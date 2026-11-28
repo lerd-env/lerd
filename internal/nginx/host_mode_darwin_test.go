@@ -30,6 +30,9 @@ func hostModeLegs(t *testing.T, sites ...config.Site) {
 	t.Cleanup(func() { hostNginxBinary, portsForwarded = prevBin, prevFwd })
 	hostNginxBinary = func() (string, bool) { return "/opt/homebrew/bin/nginx", true }
 	portsForwarded = func() bool { return true }
+	if _, err := Place(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestHostMode_AppliesWhenEveryLegHolds(t *testing.T) {
@@ -61,6 +64,14 @@ func TestHostMode_NamesTheLegThatFails(t *testing.T) {
 		{"ports not forwarded", func(t *testing.T) {
 			portsForwarded = func() bool { return false }
 		}, "lerd install"},
+		{"a space in lerd's paths", func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "Application Support")
+			t.Setenv("XDG_DATA_HOME", dir)
+			cfg := &config.GlobalConfig{}
+			cfg.PHP.Runtime = config.PHPRuntimeNative
+			_ = config.SaveGlobal(cfg)
+			_ = config.SaveSites(&config.SiteRegistry{})
+		}, "space"},
 		{"a site needs container nginx", func(t *testing.T) {
 			reg, _ := config.LoadSites()
 			reg.Sites = append(reg.Sites, config.Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"})
@@ -75,8 +86,8 @@ func TestHostMode_NamesTheLegThatFails(t *testing.T) {
 			if !strings.Contains(why, c.want) {
 				t.Errorf("HostModeBlocker() = %q, want it to mention %q", why, c.want)
 			}
-			if OnHost() {
-				t.Error("OnHost() = true with a leg broken")
+			if _, _ = Place(); OnHost() {
+				t.Error("Place kept nginx on the host with a leg broken")
 			}
 		})
 	}
@@ -84,7 +95,7 @@ func TestHostMode_NamesTheLegThatFails(t *testing.T) {
 
 // The container image carries mime.types and fastcgi_params; the host's nginx
 // reads lerd's own copies beside nginx.conf, the port fastcgi_params passes is
-// the public one, and nginx's own redirects carry no port at all.
+// the public one, and nginx's own redirects stay relative to what was asked.
 func TestEnsureNginxConfig_onHostWritesWhatTheImageCarried(t *testing.T) {
 	hostModeLegs(t)
 	if err := EnsureNginxConfig(); err != nil {
@@ -92,7 +103,7 @@ func TestEnsureNginxConfig_onHostWritesWhatTheImageCarried(t *testing.T) {
 	}
 	dir := config.NginxDir()
 	conf := readConf(t, filepath.Join(dir, "nginx.conf"))
-	for _, want := range []string{"include " + filepath.Join(dir, "mime.types") + ";", "port_in_redirect off;"} {
+	for _, want := range []string{"include " + filepath.Join(dir, "mime.types") + ";", "absolute_redirect off;"} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("nginx.conf missing %q:\n%s", want, conf)
 		}
@@ -226,5 +237,48 @@ func TestEnsureNativeUpstreams_rewritesAContainerFormFileOnHost(t *testing.T) {
 	}
 	if got := readConf(t, path); strings.Contains(got, "host.containers.internal") {
 		t.Errorf("upstreams left in container form on the host:\n%s", got)
+	}
+}
+
+// A user's http.d override that sets the directive itself must win, not sit
+// beside lerd's, which nginx would refuse as a duplicate.
+func TestEnsureNginxConfig_onHostDefersToAnOverrideOfAbsoluteRedirect(t *testing.T) {
+	hostModeLegs(t)
+	if err := os.MkdirAll(config.NginxHttpD(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.NginxHttpD(), "mine.conf"), []byte("absolute_redirect on;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	conf := readConf(t, filepath.Join(config.NginxDir(), "nginx.conf"))
+	for _, line := range strings.Split(conf, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "absolute_redirect") {
+			t.Errorf("nginx.conf sets absolute_redirect beside the override:\n%s", conf)
+		}
+	}
+}
+
+// Where nginx runs changes only when Place moves it: a site added to the
+// registry must not turn every later write into the other home's form.
+func TestOnHost_staysUntilPlaceMovesIt(t *testing.T) {
+	hostModeLegs(t)
+	franken := config.Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"}
+	if err := RefuseContainerSite(franken); err == nil || !strings.Contains(err.Error(), "lerd php:runtime container") {
+		t.Errorf("RefuseContainerSite on the host = %v, want a refusal naming the way out", err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{franken}}); err != nil {
+		t.Fatal(err)
+	}
+	if !OnHost() {
+		t.Fatal("a registry change moved nginx off the host")
+	}
+	if moved, err := Place(); err != nil || !moved || OnHost() {
+		t.Errorf("Place() = %v, %v, OnHost() = %v; want it moved into its container", moved, err, OnHost())
+	}
+	if err := RefuseContainerSite(franken); err != nil {
+		t.Errorf("RefuseContainerSite in the container = %v", err)
 	}
 }

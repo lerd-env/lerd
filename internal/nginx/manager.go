@@ -2173,17 +2173,19 @@ func EnsureNginxConfig() error {
 	}); err != nil {
 		return fmt.Errorf("rendering nginx.conf: %w", err)
 	}
-	rendered := dropOverriddenDefaults(buf.String(), httpOverrideNames())
+	rendered := buf.String()
 	if OnHost() {
 		if err := ensureHostFiles(); err != nil {
 			return err
 		}
-		// Behind the port forward nginx's own port is the loopback one, which
-		// a redirect it builds would otherwise send the browser to.
-		rendered = strings.Replace(rendered, "http {", "http {\n    port_in_redirect off;", 1)
+		// Behind the port forward nginx's own port is the loopback one, so a
+		// redirect it builds keeps the client's host and port rather than name it.
+		rendered = strings.Replace(rendered, "http {", "http {\n    absolute_redirect off;", 1)
 		// launchd supervises it, so it must not fork away from the process it started.
 		rendered = "daemon off;\n" + rendered
 	}
+	// After the host defaults, so a user's http.d override of one replaces it.
+	rendered = dropOverriddenDefaults(rendered, httpOverrideNames())
 	return writeConf(destPath, []byte(rendered))
 }
 

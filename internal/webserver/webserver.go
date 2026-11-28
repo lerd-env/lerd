@@ -114,6 +114,12 @@ func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, 
 // OnHost reports whether nginx runs on the host rather than in its container.
 func OnHost() bool { return nginx.OnHost() }
 
+// Place moves nginx's recorded home to where it can run, reporting a move.
+func Place() (bool, error) { return nginx.Place() }
+
+// RefuseContainerSite refuses a site host nginx cannot reach while it runs there.
+func RefuseContainerSite(s config.Site) error { return nginx.RefuseContainerSite(s) }
+
 // Running reports whether the web server is up, wherever it runs.
 func Running() bool { return nginx.Running() }
 

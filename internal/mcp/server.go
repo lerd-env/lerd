@@ -4207,6 +4207,9 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 
 	site.Runtime = "frankenphp"
 	site.RuntimeWorker = worker
+	if err := webserver.RefuseContainerSite(*site); err != nil {
+		return toolErr(err.Error()), nil
+	}
 	if err := config.AddSite(*site); err != nil {
 		return toolErr("updating site: " + err.Error()), nil
 	}

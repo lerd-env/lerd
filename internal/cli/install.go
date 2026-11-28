@@ -580,6 +580,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	// 6. Nginx
+	// Before any nginx file is written, so each is written for the nginx that runs it.
+	if _, err := webserver.Place(); err != nil {
+		return fmt.Errorf("placing nginx: %w", err)
+	}
 	step("Writing nginx configuration")
 	if err := webserver.EnsureConfig(); err != nil {
 		return err

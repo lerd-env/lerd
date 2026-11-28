@@ -205,10 +205,14 @@ func ApplyPHPRuntime(mode string) error {
 		}
 	}
 
-	wasOnHost := webserver.OnHost()
 	cfg.PHP.Runtime = mode
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
+	}
+	// nginx's new home is decided before any vhost is rewritten for it.
+	moved, err := webserver.Place()
+	if err != nil {
+		return fmt.Errorf("placing nginx: %w", err)
 	}
 
 	// The xdebug ini belongs to the runtime that wrote it, and only a switch
@@ -268,7 +272,7 @@ func ApplyPHPRuntime(mode string) error {
 	// nginx that moved with PHP started on the new config. Otherwise a refused reload
 	// leaves it on the old runtime, every site 502 while the switch reports success,
 	// and one unloadable certificate anywhere causes it, so it is said, not swallowed.
-	if !moveWebServer(wasOnHost, sites.Sites) {
+	if !moveWebServer(moved, sites.Sites) {
 		if err := webserver.Reload(); err != nil {
 			feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
 		}
