@@ -124,5 +124,11 @@ func writeHostUnit() (bool, error) {
 		return false, err
 	}
 	removeContainerFn(podman.WebServerUnit)
+	// The container's quadlet goes too: a pass over every lerd-*.container (the LAN
+	// rebind) would otherwise rewrite it and its launchd job over the host's unit.
+	quadlet := filepath.Join(config.QuadletDir(), podman.WebServerUnit+".container")
+	if err := os.Remove(quadlet); err != nil && !os.IsNotExist(err) {
+		return changed, err
+	}
 	return changed, nil
 }

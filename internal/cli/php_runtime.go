@@ -328,11 +328,32 @@ func nativeVersionsWanted() []string {
 	}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if switchableToNative(s) && s.PHPVersion != "" && !slices.Contains(out, s.PHPVersion) {
-			out = append(out, s.PHPVersion)
+		if !switchableToNative(s) {
+			continue
+		}
+		for _, v := range siteAndWorktreePHPVersions(s) {
+			if nativephp.Supported(v) && !slices.Contains(out, v) {
+				out = append(out, v)
+			}
 		}
 	}
 	slices.Sort(out)
+	return out
+}
+
+// siteAndWorktreePHPVersions is the site's PHP version plus any a worktree of it
+// pins in its own .lerd.yaml, since each worktree vhost is written for its own.
+func siteAndWorktreePHPVersions(s *config.Site) []string {
+	var out []string
+	if s.PHPVersion != "" {
+		out = append(out, s.PHPVersion)
+	}
+	wts, _ := switchWorktreesFor(s.Path, s.PrimaryDomain())
+	for _, wt := range wts {
+		if v := config.WorktreePHPVersion(wt.Path, s.PHPVersion); v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
 	return out
 }
 
@@ -347,8 +368,11 @@ func versionsInUse(installed []string) []string {
 	used := map[string]bool{}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if switchableToNative(s) && s.PHPVersion != "" {
-			used[s.PHPVersion] = true
+		if !switchableToNative(s) {
+			continue
+		}
+		for _, v := range siteAndWorktreePHPVersions(s) {
+			used[v] = true
 		}
 	}
 	out := make([]string, 0, len(used))
@@ -378,7 +402,8 @@ func regenerateWorktreeVhosts(s *config.Site) {
 		return
 	}
 	for _, wt := range wts {
-		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
+		php := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
+		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, php, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 			feedback.Warn("regenerating the vhost for %s: %v", wt.Domain, err)
 		}
 	}
@@ -421,23 +446,33 @@ var rerunSiteEnv = func(dir string) {
 	})
 }
 
-// unsupportedSitesMessage lists the sites whose PHP has no native runtime, or
+// unsupportedSitesMessage lists the sites and worktrees whose PHP has no native runtime, or
 // "" when every site could move. The switch is install-wide, so naming them all
 // at once turns a run of failed attempts into one decision.
 func unsupportedSitesMessage(sites []config.Site) string {
 	var blocked []string
 	seen := map[string]bool{}
+	add := func(entry string) {
+		if !seen[entry] {
+			seen[entry] = true
+			blocked = append(blocked, entry)
+		}
+	}
 	for i := range sites {
 		s := &sites[i]
-		if !switchableToNative(s) || nativephp.Supported(s.PHPVersion) {
+		if !switchableToNative(s) {
 			continue
 		}
-		entry := s.Name + " (php " + s.PHPVersion + ")"
-		if seen[entry] {
-			continue
+		if !nativephp.Supported(s.PHPVersion) {
+			add(s.Name + " (php " + s.PHPVersion + ")")
 		}
-		seen[entry] = true
-		blocked = append(blocked, entry)
+		// A worktree pinning an older PHP would get a vhost with no listener behind it.
+		wts, _ := switchWorktreesFor(s.Path, s.PrimaryDomain())
+		for _, wt := range wts {
+			if v := config.WorktreePHPVersion(wt.Path, s.PHPVersion); v != s.PHPVersion && !nativephp.Supported(v) {
+				add(wt.Domain + " (php " + v + ")")
+			}
+		}
 	}
 	if len(blocked) == 0 {
 		return ""

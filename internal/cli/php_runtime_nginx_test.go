@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -105,5 +107,49 @@ func TestFollowNginxMove_rewritesActiveWorktrees(t *testing.T) {
 	})
 	if want := "feat.a.test,rest"; strings.Join(got, ",") != want {
 		t.Errorf("rewrote %v, want %s", got, want)
+	}
+}
+
+// A FrankenPHP site is not moved by the switch, so the sweep of what it leaves
+// rewrites its worktrees, or a secured one keeps the container's certificate paths.
+func TestRewriteUnmovedConfigs_rewritesFrankenPHPWorktrees(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var got []string
+	prevList, prevWrite, prevOnHost := switchWorktreesFor, switchWriteWorktreeVhost, moveOnHostFn
+	t.Cleanup(func() { switchWorktreesFor, switchWriteWorktreeVhost, moveOnHostFn = prevList, prevWrite, prevOnHost })
+	moveOnHostFn = func() bool { return false }
+	switchWorktreesFor = func(path, domain string) ([]gitpkg.Worktree, error) {
+		return []gitpkg.Worktree{{Path: path + "/wt", Domain: "feat." + domain}}, nil
+	}
+	switchWriteWorktreeVhost = func(domain, _, _, _, _, _ string, _ bool) error {
+		got = append(got, domain)
+		return nil
+	}
+	rewriteUnmovedConfigs([]config.Site{{Name: "fp", Domains: []string{"fp.test"}, Path: t.TempDir(), Runtime: "frankenphp"}})
+	if want := "feat.fp.test"; strings.Join(got, ",") != want {
+		t.Errorf("rewrote %v, want %s", got, want)
+	}
+}
+
+// A worktree that pins its own PHP version keeps it when the sweep rewrites it.
+func TestRegenerateWorktreeVhosts_keepsTheWorktreesPHP(t *testing.T) {
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".lerd.yaml"), []byte("php_version: \"8.3\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	prevList, prevWrite := switchWorktreesFor, switchWriteWorktreeVhost
+	t.Cleanup(func() { switchWorktreesFor, switchWriteWorktreeVhost = prevList, prevWrite })
+	switchWorktreesFor = func(_, domain string) ([]gitpkg.Worktree, error) {
+		return []gitpkg.Worktree{{Path: wt, Domain: "feat." + domain}}, nil
+	}
+	switchWriteWorktreeVhost = func(domain, _, php, _, _, _ string, _ bool) error {
+		got = append(got, domain+"@"+php)
+		return nil
+	}
+	regenerateWorktreeVhosts(&config.Site{Name: "fp", Domains: []string{"fp.test"}, Path: t.TempDir(), PHPVersion: "8.5", Runtime: "frankenphp"})
+	if want := "feat.fp.test@8.3"; strings.Join(got, ",") != want {
+		t.Errorf("wrote %v, want %s", got, want)
 	}
 }

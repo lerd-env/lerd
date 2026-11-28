@@ -753,6 +753,14 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 		return nil, err
 	}
 
+	if site.IsFrankenPHP() && OnHost() {
+		// The host's nginx cannot resolve the container, so it goes to its loopback port.
+		hostPort, err := frankenPHPHostPortFn(site.Name)
+		if err != nil {
+			return nil, fmt.Errorf("publishing %s on a loopback port for the host's nginx: %w", site.Name, err)
+		}
+		container, port = "127.0.0.1", hostPort
+	}
 	devBase, devPort := detectSiteDevServer(site)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
@@ -778,6 +786,9 @@ func writeNonFPMConf(site config.Site, name string, rendered []byte) error {
 	removeWorkerSubdomainVhosts(site.PrimaryDomain())
 	return writeSiteConf(name, rendered)
 }
+
+// frankenPHPHostPortFn is a seam so a test claims no port in the developer's registry.
+var frankenPHPHostPortFn = podman.FrankenPHPHostPort
 
 // GenerateFrankenPHPVhost renders the HTTP vhost template for a FrankenPHP
 // site. Nginx reverse-proxies to the per-site lerd-fp-<name>:8000 container
@@ -1701,11 +1712,11 @@ func EnsureDefaultVhost() error {
 			return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 		}
 		fmt.Printf("  [INFO] %s has no lerd sentinel; preserving on-disk content. If this is from a lerd upgrade and you haven't edited it, run: rm %s\n", path, path)
-		return nil
+		return keepEditForHost(path, onDisk)
 	}
 	if lastWritten != onDiskHash {
 		fmt.Printf("  [INFO] %s differs from lerd's recorded last-write; preserving your edits. Remove the file to restore lerd's catch-all.\n", path)
-		return nil
+		return keepEditForHost(path, onDisk)
 	}
 	if onDiskHash == canonicalHash {
 		return nil
@@ -1715,6 +1726,33 @@ func EnsureDefaultVhost() error {
 		return err
 	}
 	return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
+}
+
+// keepEditForHost rewrites a preserved hand edit in the host's form, or the
+// host's nginx refuses to start on its container paths. The original is kept
+// beside it and put back when nginx returns to its container, unless edited since.
+func keepEditForHost(path string, onDisk []byte) error {
+	original := path + ".container"
+	if !OnHost() {
+		saved, err := os.ReadFile(original)
+		if err != nil {
+			return nil
+		}
+		if bytes.Equal(hostForm(saved), onDisk) {
+			if err := WriteFileAtomic(path, saved, 0644); err != nil {
+				return err
+			}
+		}
+		return os.Remove(original)
+	}
+	translated := hostForm(onDisk)
+	if bytes.Equal(translated, onDisk) {
+		return nil
+	}
+	if err := WriteFileAtomic(original, onDisk, 0644); err != nil {
+		return err
+	}
+	return WriteFileAtomic(path, translated, 0644)
 }
 
 // readFileOrEmpty returns the file's contents as a string, or "" on any
@@ -1979,6 +2017,9 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Lerd-Trust %s;
+    # The claim redirect names 127.0.0.1:7073, the proxy_pass of a host nginx,
+    # which nginx would otherwise rewrite back onto this vhost.
+    proxy_redirect off;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
 
