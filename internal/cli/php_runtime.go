@@ -328,11 +328,32 @@ func nativeVersionsWanted() []string {
 	}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if switchableToNative(s) && s.PHPVersion != "" && !slices.Contains(out, s.PHPVersion) {
-			out = append(out, s.PHPVersion)
+		if !switchableToNative(s) {
+			continue
+		}
+		for _, v := range siteAndWorktreePHPVersions(s) {
+			if nativephp.Supported(v) && !slices.Contains(out, v) {
+				out = append(out, v)
+			}
 		}
 	}
 	slices.Sort(out)
+	return out
+}
+
+// siteAndWorktreePHPVersions is the site's PHP version plus any a worktree of it
+// pins in its own .lerd.yaml, since each worktree vhost is written for its own.
+func siteAndWorktreePHPVersions(s *config.Site) []string {
+	var out []string
+	if s.PHPVersion != "" {
+		out = append(out, s.PHPVersion)
+	}
+	wts, _ := switchWorktreesFor(s.Path, s.PrimaryDomain())
+	for _, wt := range wts {
+		if v := config.WorktreePHPVersion(wt.Path, s.PHPVersion); v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
 	return out
 }
 
@@ -347,8 +368,11 @@ func versionsInUse(installed []string) []string {
 	used := map[string]bool{}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if switchableToNative(s) && s.PHPVersion != "" {
-			used[s.PHPVersion] = true
+		if !switchableToNative(s) {
+			continue
+		}
+		for _, v := range siteAndWorktreePHPVersions(s) {
+			used[v] = true
 		}
 	}
 	out := make([]string, 0, len(used))
