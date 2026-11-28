@@ -8,10 +8,9 @@ import (
 	"github.com/geodro/lerd/internal/php"
 )
 
-// AlignPHPVersion moves the checkout at dir, the site's own or one of its
-// worktrees, onto the newest installed PHP its code accepts when the version it
-// runs on no longer does, as after switching to a branch that requires a newer
-// one. It returns the version moved to, or "" when none was needed.
+// AlignPHPVersion moves the checkout at dir, the site's or a worktree's, onto the
+// newest installed PHP its code accepts when its current one no longer fits, as
+// after switching branch. It returns the version moved to, or "" when none was needed.
 func AlignPHPVersion(site *config.Site, dir string) (string, error) {
 	if site.IsCustomContainer() || site.IsHostProxy() {
 		return "", nil
