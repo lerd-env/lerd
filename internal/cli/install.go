@@ -581,7 +581,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	// 6. Nginx
 	// Before any nginx file is written, so each is written for the nginx that runs it.
-	if _, err := webserver.Place(); err != nil {
+	nginxMoved, err := webserver.Place()
+	if err != nil {
 		return fmt.Errorf("placing nginx: %w", err)
 	}
 	step("Writing nginx configuration")
@@ -629,9 +630,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		}
 		rewakeSleepingSites(reg.Sites)
-		// Moving to the host's nginx leaves no file in its container form: a
-		// paused page or a service domain that kept one stops nginx starting.
-		if webserver.OnHost() {
+		// A move leaves no file in the old home's form: one worktree, paused page or
+		// service domain that kept it stops the host's nginx starting.
+		if nginxMoved {
+			followNginxMove(reg.Sites)
+		} else if webserver.OnHost() {
 			rewriteUnmovedConfigs(reg.Sites)
 		}
 	}

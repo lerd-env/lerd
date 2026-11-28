@@ -2,8 +2,6 @@ package nginx
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -53,14 +51,9 @@ func needsContainerNginx(s config.Site) bool {
 	return s.IsFrankenPHP() || s.IsCustomContainer() || s.IsCustomFPM()
 }
 
-func hostMarker() string { return filepath.Join(config.DataDir(), "nginx-on-host") }
-
 // OnHost reports where nginx runs now, as Place last recorded it, not where it
 // could: a registry change alone never moves it, so configs follow the nginx serving them.
-func OnHost() bool {
-	_, err := os.Stat(hostMarker())
-	return err == nil
-}
+func OnHost() bool { return config.NginxOnHost() }
 
 // Place records nginx on the host when HostModeBlocker allows it and in its
 // container otherwise, reporting whether that moved it. The caller rewrites the
@@ -70,13 +63,7 @@ func Place() (bool, error) {
 	if want == was {
 		return false, nil
 	}
-	if !want {
-		return true, os.Remove(hostMarker())
-	}
-	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
-		return false, err
-	}
-	return true, os.WriteFile(hostMarker(), nil, 0o644)
+	return true, config.SetNginxOnHost(want)
 }
 
 // RefuseContainerSite refuses a site that only container nginx can reach while

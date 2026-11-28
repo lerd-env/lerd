@@ -467,13 +467,16 @@ func serviceUpstream(service string, port int) (string, int, error) {
 	if !domainOnHostFn() {
 		return "lerd-" + service, port, nil
 	}
-	for _, m := range HostPortMappings(service) {
-		parts := strings.Split(m, ":")
-		if len(parts) < 2 || strings.SplitN(parts[len(parts)-1], "/", 2)[0] != strconv.Itoa(port) {
-			continue
+	sc := config.ServiceConfigFor(service)
+	for i, m := range HostPortMappings(service) {
+		if config.MappingContainerPort(m) == port {
+			// HostPortMappings applies only the primary override; a moved secondary is per port.
+			return "127.0.0.1", sc.HostPortFor(port, config.MappingHostPort(m), i == 0), nil
 		}
-		if host, err := strconv.Atoi(parts[len(parts)-2]); err == nil {
-			return "127.0.0.1", host, nil
+	}
+	for _, m := range sc.ExtraPorts {
+		if config.MappingContainerPort(m) == port {
+			return "127.0.0.1", config.MappingHostPort(m), nil
 		}
 	}
 	return "", 0, fmt.Errorf("service %q publishes no host port for %d, which an nginx on the host needs to reach it", service, port)

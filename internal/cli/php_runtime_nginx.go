@@ -113,3 +113,14 @@ func rewriteUnmovedWorktrees(s config.Site) {
 		}
 	}
 }
+
+// followNginxMove rewrites what install's own site loop leaves behind when it
+// moves nginx: the active sites' worktrees, then everything the switch skips.
+func followNginxMove(sites []config.Site) {
+	for i := range sites {
+		if switchableToNative(&sites[i]) {
+			regenerateWorktreeVhosts(&sites[i])
+		}
+	}
+	moveRewriteRestFn(sites)
+}

@@ -81,3 +81,28 @@ func TestRewriteUnmovedWorktrees_followsTheSitesKind(t *testing.T) {
 		t.Errorf("rewrote %v, want %s", got, want)
 	}
 }
+
+// install's own loop rewrites only the sites, so when it moves nginx their
+// worktrees follow too, beside everything the runtime switch skips.
+func TestFollowNginxMove_rewritesActiveWorktrees(t *testing.T) {
+	var got []string
+	prevList, prevWrite, prevRest := switchWorktreesFor, switchWriteWorktreeVhost, moveRewriteRestFn
+	t.Cleanup(func() {
+		switchWorktreesFor, switchWriteWorktreeVhost, moveRewriteRestFn = prevList, prevWrite, prevRest
+	})
+	switchWorktreesFor = func(path, domain string) ([]gitpkg.Worktree, error) {
+		return []gitpkg.Worktree{{Path: path + "/wt", Domain: "feat." + domain}}, nil
+	}
+	switchWriteWorktreeVhost = func(domain, _, _, _, _, _ string, _ bool) error {
+		got = append(got, domain)
+		return nil
+	}
+	moveRewriteRestFn = func([]config.Site) { got = append(got, "rest") }
+	followNginxMove([]config.Site{
+		{Name: "a", Domains: []string{"a.test"}, Path: "/a"},
+		{Name: "p", Domains: []string{"p.test"}, Path: "/p", Paused: true},
+	})
+	if want := "feat.a.test,rest"; strings.Join(got, ",") != want {
+		t.Errorf("rewrote %v, want %s", got, want)
+	}
+}
