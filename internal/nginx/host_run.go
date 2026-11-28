@@ -98,10 +98,9 @@ func hostWorkerPIDs() ([]string, error) {
 	return strings.Fields(string(out)), nil
 }
 
-// WriteServiceUnit writes a launchd or systemd unit through the service
-// manager. Set by the binary's entry point rather than imported: the service
-// manager's init makes every quadlet write a real plist, which no test of this
-// package may do.
+// WriteServiceUnit writes a unit through the service manager, set by the binary's
+// entry point rather than imported: that package's init makes every quadlet write
+// a real plist, which no test of this package may do.
 var WriteServiceUnit func(name, content string) (bool, error)
 
 // Seams for writing the unit and dropping the container, which a test must not

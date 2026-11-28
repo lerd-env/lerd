@@ -14,10 +14,9 @@ var (
 	portsForwarded  = portforward.Installed
 )
 
-// HostModeBlocker returns why nginx stays in its container, or "" when it runs
-// on the host. Every leg has to hold, so a missing one never half-moves the
-// stack: a host nginx without the port forward answers nothing on 80 and 443,
-// and one beside a containerised site cannot resolve that site's backend.
+// HostModeBlocker returns why nginx stays in its container, or "" when it runs on
+// the host. Every leg must hold: without the forward it answers nothing on 80 and
+// 443, and beside a containerised site it cannot resolve that site's backend.
 func HostModeBlocker() string {
 	cfg, err := config.LoadGlobal()
 	if err != nil || cfg.NginxRuntimeMode() != config.NginxRuntimeHost {
