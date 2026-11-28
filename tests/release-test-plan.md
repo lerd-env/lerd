@@ -630,6 +630,8 @@ Removing a service and what it leaves behind:
 - [ ] Mailpit embedded in the dashboard on lerd.localhost answers its API with
       the browser's Origin and opens its live websocket, with no cors warning
       in its log
+- [ ] `lerd service remove` on a stopped service, or on an external server,
+      does not print "stopping lerd-<name>", since there is nothing to stop
 
 ---
 
