@@ -260,6 +260,9 @@ fi
 check_not "the MCP call downloaded nothing" 'typesense' bash -c "podman images --format '{{.Repository}}'"
 expect_200 "$url"
 
+lerd service stop memcached </dev/null >/dev/null 2>&1
+check_not "5.46 [partial] removing a stopped service does not say it stops it" 'stopping lerd-memcached' lerd service remove memcached
+
 # Hand the next phase a working site: the purge above left a fresh, empty
 # MySQL, so recreate the schema whatever the checks above found.
 lerd service start mysql </dev/null >/dev/null 2>&1

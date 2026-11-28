@@ -77,21 +77,6 @@ var (
 // leaves behind.
 const defaultResetSnapshotLabel = "pre-remove"
 
-// RemoveService stops, removes, and (optionally) wipes the data of a service.
-// It is the single entry point shared by the CLI, MCP, and UI handlers.
-//
-// Order:
-//  0. (if RemoveData and not SkipSnapshot) snapshot every database on it
-//  1. emit stopping_unit, StopUnit (only if active/activating; abort on error)
-//  2. emit removing_container, RemoveContainer
-//  3. (if RemoveData) emit removing_data, rename-aside ~/.local/share/lerd/data/<name>
-//  4. emit removing_quadlet, RemoveQuadlet, DaemonReload
-//  5. emit removing_config, RemoveCustomService (no-op for default presets)
-//  6. emit regenerating_consumers, RegenerateFamilyConsumers (if family known)
-//  7. emit done
-//
-// emit may be nil. Default-preset services are accepted: their YAML doesn't
-// exist on disk, so RemoveCustomService is a tolerated no-op.
 // presetStillReferenced reports whether any installed custom service is still
 // materialised from the given preset (e.g. mariadb-11-8 and mariadb-10-11 both
 // reference "mariadb"). Fails safe — on a listing error it returns true so a
@@ -109,6 +94,9 @@ func presetStillReferenced(preset string) bool {
 	return false
 }
 
+// RemoveService stops, removes and optionally wipes a service for the CLI, MCP
+// and UI alike. emit may be nil; stopping_unit only fires when the unit is
+// running, so an external or stopped service never claims a stop.
 func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error {
 	if emit == nil {
 		emit = func(PhaseEvent) {}
@@ -142,9 +130,9 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 		}
 	}
 
-	emit(PhaseEvent{Phase: "stopping_unit", Unit: unit})
 	status, _ := removeUnitStatusFn(unit)
 	if status == "active" || status == "activating" {
+		emit(PhaseEvent{Phase: "stopping_unit", Unit: unit})
 		if err := removeStopUnit(unit); err != nil {
 			return fmt.Errorf("stop %s: %w", unit, err)
 		}

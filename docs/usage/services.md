@@ -157,7 +157,7 @@ MariaDB's Windows setup already adds the computer's name, so it needs nothing. A
 
 The folder has to hold both the client and the dump tool. `pg_dump` refuses a server newer than itself, so lerd checks that as well, and **Test connection** shows the folder it used. A machine with no client tools for the engine gets an error naming them, and nothing is saved.
 
-The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in files only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
+The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in files only you can read, under lerd's data folder, and removing the service leaves everything on the server alone. Nothing of it runs in a container, so removing it stops nothing either.
 
 To point a project at it, run this inside the project:
 
