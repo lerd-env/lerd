@@ -294,7 +294,7 @@ idle_dashboard_quiet() {
 	echo "$n frames in 20s"
 	[ "$n" -ge 1 ] && [ "$n" -le 5 ]
 }
-check "10.94 an idle open dashboard is not rebuilt every second" idle_dashboard_quiet
+check "10.95 an idle open dashboard is not rebuilt every second" idle_dashboard_quiet
 
 # service_status_within <service> <status> <seconds>: waits for /api/services to
 # report the status, printing how long it took.
@@ -329,4 +329,4 @@ external_stop_shows() {
 	[ "$was_up" = 1 ] || lerd service stop mailpit >/dev/null 2>&1
 	return $rc
 }
-check "10.95 a service stopped and started outside lerd shows within seconds" external_stop_shows
+check "10.94 a service stopped and started outside lerd shows within seconds" external_stop_shows
