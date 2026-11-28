@@ -526,6 +526,8 @@ left there is where resolved fails over after one dropped upstream query:
 - [ ] A root CA added on the host (a company CA in the distro's local anchor
       folder) is refused inside the PHP image until `lerd php:trust-host-ca on`
       and `lerd php:rebuild`, then trusted, and gone again after `off` and a rebuild
+- [ ] Changing `.php-version` on a **secured** site rewrites the HTTPS vhost it is
+      served from (no `<domain>-ssl.conf` left beside it) and answers on the new version
 
 ---
 
@@ -1148,6 +1150,8 @@ Other surfaces:
 - [ ] Restarting lerd-ui keeps a request's debug events (`dumps-buffer.json`,
       mode 600), and removing its route from history drops those events and its
       SPX capture
+- [ ] On a FrankenPHP site, adding a domain, toggling a page plugin and changing
+      its PHP version each keep it proxying to its own container, **200**
 
 ---
 

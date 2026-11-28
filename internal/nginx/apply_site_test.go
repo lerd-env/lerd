@@ -128,3 +128,19 @@ func hostProxySite() config.Site {
 	s.HostPort = 5173
 	return s
 }
+
+// An older binary interrupted between writing <domain>-ssl.conf and renaming it
+// over <domain>.conf left it behind, and nginx loads it first, so applying the
+// site removes it rather than serve the stale one beside the fresh.
+func TestApplySite_removesALegacySSLFileItSupersedes(t *testing.T) {
+	confD := setupConfD(t)
+	for _, site := range []config.Site{secured(fpmSite()), secured(hostProxySite())} {
+		legacy := filepath.Join(confD, site.PrimaryDomain()+"-ssl.conf")
+		must(t, os.MkdirAll(confD, 0o755))
+		must(t, os.WriteFile(legacy, []byte("server { listen 443 ssl; }\n"), 0o644))
+		must(t, ApplySite(site))
+		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+			t.Errorf("%s: legacy %s still there beside the vhost: %v", site.Name, filepath.Base(legacy), err)
+		}
+	}
+}
