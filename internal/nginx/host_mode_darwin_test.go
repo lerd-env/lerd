@@ -381,6 +381,19 @@ func TestEnsureDefaultVhost_onHostTranslatesAHandEdit(t *testing.T) {
 	if again, _ := os.ReadFile(path); string(again) != string(got) {
 		t.Errorf("a second pass changed the edit again:\n%s", again)
 	}
+	// Back in its container, the edit is the user's original again.
+	if err := config.SetNginxOnHost(false); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDefaultVhost(); err != nil {
+		t.Fatal(err)
+	}
+	if back, _ := os.ReadFile(path); string(back) != edit {
+		t.Errorf("the edit was not restored in the container:\n%s", back)
+	}
+	if _, err := os.Stat(path + ".container"); !os.IsNotExist(err) {
+		t.Errorf("the saved original was left behind: %v", err)
+	}
 }
 
 // The dashboard's claim redirects to 127.0.0.1:7073. On the host that is also

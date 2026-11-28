@@ -1729,16 +1729,30 @@ func EnsureDefaultVhost() error {
 }
 
 // keepEditForHost rewrites a preserved hand edit in the host's form, or the
-// host's nginx refuses to start on its container paths. The sentinel is left as
-// it is, so the file stays the user's.
+// host's nginx refuses to start on its container paths. The original is kept
+// beside it and put back when nginx returns to its container, unless edited since.
 func keepEditForHost(path string, onDisk []byte) error {
+	original := path + ".container"
 	if !OnHost() {
+		saved, err := os.ReadFile(original)
+		if err != nil {
+			return nil
+		}
+		if bytes.Equal(hostForm(saved), onDisk) {
+			if err := WriteFileAtomic(path, saved, 0644); err != nil {
+				return err
+			}
+		}
+		return os.Remove(original)
+	}
+	translated := hostForm(onDisk)
+	if bytes.Equal(translated, onDisk) {
 		return nil
 	}
-	if translated := hostForm(onDisk); !bytes.Equal(translated, onDisk) {
-		return WriteFileAtomic(path, translated, 0644)
+	if err := WriteFileAtomic(original, onDisk, 0644); err != nil {
+		return err
 	}
-	return nil
+	return WriteFileAtomic(path, translated, 0644)
 }
 
 // readFileOrEmpty returns the file's contents as a string, or "" on any

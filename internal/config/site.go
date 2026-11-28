@@ -1114,6 +1114,24 @@ func ClaimWorktreeHostPort(name, wtBase string, pick func() int) (int, error) {
 	return 0, fmt.Errorf("site %q not found", name)
 }
 
+// HeldHostPorts lists the host ports the site has claimed, running or not.
+func (s Site) HeldHostPorts() []int {
+	var ports []int
+	for _, p := range []int{s.HostPort, s.DevServerPort, s.FrankenPHPHostPort} {
+		if p > 0 {
+			ports = append(ports, p)
+		}
+	}
+	for _, m := range []map[string]int{s.WorktreeHostPorts, s.WorktreeDevPorts, s.WorkerPorts} {
+		for _, p := range m {
+			if p > 0 {
+				ports = append(ports, p)
+			}
+		}
+	}
+	return ports
+}
+
 // ClaimFrankenPHPHostPort returns the loopback port recorded for a FrankenPHP
 // site, or records the one pick returns, under the registry lock so two sites
 // never get the same port. pick is handed the ports other sites already hold.
@@ -1132,7 +1150,10 @@ func ClaimFrankenPHPHostPort(name string, pick func(taken map[int]bool) int) (in
 	for i := range reg.Sites {
 		if reg.Sites[i].Name == name {
 			idx = i
-		} else if p := reg.Sites[i].FrankenPHPHostPort; p > 0 {
+			continue
+		}
+		// A stopped dev server or worker still owns its port, which a bind check cannot see.
+		for _, p := range reg.Sites[i].HeldHostPorts() {
 			taken[p] = true
 		}
 	}

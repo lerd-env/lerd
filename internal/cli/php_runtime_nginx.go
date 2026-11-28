@@ -89,6 +89,10 @@ func rewriteUnmovedConfigs(sites []config.Site) {
 			if err := webserver.ApplySite(*s); err != nil {
 				feedback.Warn("rewriting the vhost for %s: %v", s.Name, err)
 			}
+			// The switch's own sweep reaches only the sites it moves to native PHP.
+			if s.IsFrankenPHP() {
+				regenerateWorktreeVhosts(s)
+			}
 		}
 		rewriteUnmovedWorktrees(*s)
 	}

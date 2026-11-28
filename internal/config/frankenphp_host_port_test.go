@@ -43,3 +43,26 @@ func TestClaimFrankenPHPHostPort(t *testing.T) {
 		t.Error("claimed a port for a site that is not registered")
 	}
 }
+
+// A port another site holds for a stopped dev server or worker is never claimed.
+func TestClaimFrankenPHPHostPort_skipsPortsOtherSitesHold(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	proxy := Site{Name: "proxy", Domains: []string{"proxy.test"}, Path: "/srv/proxy", HostPort: 18000, WorktreeHostPorts: map[string]int{"wt": 18001}, WorkerPorts: map[string]int{"reverb": 18002}}
+	franken := Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"}
+	for _, s := range []Site{proxy, franken} {
+		if err := AddSite(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := ClaimFrankenPHPHostPort("franken", func(taken map[int]bool) int {
+		for p := 18000; ; p++ {
+			if !taken[p] {
+				return p
+			}
+		}
+	})
+	if err != nil || got != 18003 {
+		t.Errorf("claim = %d, %v; want 18003, past the ports the proxy holds", got, err)
+	}
+}
