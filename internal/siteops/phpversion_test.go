@@ -64,14 +64,17 @@ func stubPHPVersionDeps(t *testing.T, min, max string) *int {
 	reloads := 0
 	origReload := nginxReloadFn
 	origRange := phpConstraintsFor
+	origAlign := alignConstraintsFor
 	origGap := imageGapFn
 	t.Cleanup(func() {
 		nginxReloadFn = origReload
 		phpConstraintsFor = origRange
+		alignConstraintsFor = origAlign
 		imageGapFn = origGap
 	})
 	nginxReloadFn = func() error { reloads++; return nil }
 	phpConstraintsFor = func(*config.Site) []string { return compactConstraints(phpRangeConstraint(min, max)) }
+	alignConstraintsFor = phpConstraintsFor
 	imageGapFn = func(string) imageGapResult { return imageGapResult{} }
 	return &reloads
 }

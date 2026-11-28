@@ -2,7 +2,6 @@ name: UI Screenshots
 
 on:
   pull_request:
-    branches: ["main", "release/**"]
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
 permissions:

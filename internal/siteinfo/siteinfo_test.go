@@ -1341,3 +1341,25 @@ func TestEnrich_ContainerBuildFailed(t *testing.T) {
 		}
 	}
 }
+
+// Listing sites must not move the registry's PHP version: the vhost is only
+// regenerated where the watcher records the change, so a write here left nginx
+// serving the old version while the registry named the new one.
+func TestPersistVersionChanges_leavesPHPToTheWatcher(t *testing.T) {
+	setDataDir(t)
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: t.TempDir(), PHPVersion: "8.3", NodeVersion: "20"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := PersistVersionChanges([]EnrichedSite{{Name: "app", PHPVersion: "8.5", PHPVersionChanged: true, NodeVersion: "22", NodeVersionChanged: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := config.FindSite("app")
+	if s.PHPVersion != "8.3" {
+		t.Errorf("registry PHP = %q, want 8.3 until the vhost moves with it", s.PHPVersion)
+	}
+	if s.NodeVersion != "22" {
+		t.Errorf("registry Node = %q, want 22", s.NodeVersion)
+	}
+}

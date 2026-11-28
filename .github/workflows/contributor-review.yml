@@ -1,13 +1,13 @@
 name: Contributor Review
 
-# pull_request_target so fork PRs get a token that can request reviewers; checkout stays on the base branch.
+# pull_request_target so fork PRs can read the token secret; checkout stays on the base branch.
 on:
   pull_request_target:
     branches: ["main", "release/**"]
     types: [opened, reopened, ready_for_review]
 
 permissions:
-  pull-requests: write
+  pull-requests: read
   contents: read
 
 jobs:
@@ -20,5 +20,5 @@ jobs:
       # Requested as reviewers, not code owners, so a contributor approval never satisfies the code owner gate.
       - name: Request review from lerd-env/contributors
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONTRIBUTOR_REVIEW_TOKEN }}
         run: python3 .github/scripts/contributor_review.py

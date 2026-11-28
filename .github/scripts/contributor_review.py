@@ -11,21 +11,28 @@ def should_request(pr):
     return not pr['draft'] and pr['user']['type'] != 'Bot'
 
 
-def team_requested(response):
-    return any(team['slug'] == TEAM for team in response.get('requested_teams', []))
+def problem(returncode, stdout, stderr):
+    """Why the team request did not land, or None when it did."""
+    if returncode != 0:
+        return f'GitHub refused to request the {TEAM} team: {stderr.strip()}'
+    if not any(t['slug'] == TEAM for t in json.loads(stdout).get('requested_teams', [])):
+        return f'the {TEAM} team was not added as a reviewer'
+    return None
 
 
+# A missed request only costs a notification, so it warns instead of failing the PR's checks.
 if __name__ == '__main__':
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         pr = json.load(f)['pull_request']
     if not should_request(pr):
         print('Draft or bot pull request, no review requested.')
         sys.exit(0)
-    out = subprocess.run(
+    if not os.environ.get('GH_TOKEN'):
+        print('::warning::CONTRIBUTOR_REVIEW_TOKEN secret is not set, no review requested.')
+        sys.exit(0)
+    run = subprocess.run(
         ['gh', 'api', '-X', 'POST', f"repos/{os.environ['GITHUB_REPOSITORY']}/pulls/{pr['number']}/requested_reviewers",
          '-f', f'team_reviewers[]={TEAM}'],
-        check=True, capture_output=True, text=True).stdout
-    if not team_requested(json.loads(out)):
-        print(f'::error::the {TEAM} team was not added as a reviewer')
-        sys.exit(1)
-    print(f'Requested a review from {TEAM}.')
+        capture_output=True, text=True)
+    msg = problem(run.returncode, run.stdout, run.stderr)
+    print(f'::warning::{msg}' if msg else f'Requested a review from {TEAM}.')
