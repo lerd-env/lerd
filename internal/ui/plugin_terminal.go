@@ -18,6 +18,7 @@ import (
 
 	"github.com/creack/pty"
 
+	"github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/plugins"
 )
 
@@ -310,18 +311,24 @@ func listTerminals(plugin, path, site, branch string) []terminalInfo {
 }
 
 // endOrphanTerminals ends the terminals whose plugin was removed or revoked,
-// or no longer declares the endpoint as a terminal.
+// or no longer declares the endpoint as a terminal. It looks under the install
+// lock, as an update moves the plugin aside, and skips a turn if it is busy.
 func endOrphanTerminals() {
+	release, err := git.LockInstall(plugins.Dir(), 5*time.Second)
+	if err != nil {
+		return
+	}
 	terms.Lock()
-	all := make([]*termSession, 0, len(terms.open))
+	var orphans []*termSession
 	for _, s := range terms.open {
-		all = append(all, s)
+		if !stillATerminal(s.plugin, s.path) {
+			orphans = append(orphans, s)
+		}
 	}
 	terms.Unlock()
-	for _, s := range all {
-		if !stillATerminal(s.plugin, s.path) {
-			s.end()
-		}
+	release()
+	for _, s := range orphans {
+		s.end()
 	}
 }
 

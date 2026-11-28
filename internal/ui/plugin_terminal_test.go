@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/plugins"
 )
 
@@ -448,6 +449,42 @@ func TestPluginTerminal_EndsWhenItsPluginGoes(t *testing.T) {
 		t.Errorf("a removed plugin's terminal is still listed: %+v", left)
 	}
 	waitGone(t, pid, "after its plugin was removed")
+}
+
+// An update moves the installed plugin aside under the install lock before
+// putting the new one in; a terminal checked in that moment must survive it.
+func TestPluginTerminal_SurvivesAnUpdate(t *testing.T) {
+	data := installTerminalPlugin(t)
+	withDashboard(t)
+	srv := httptest.NewServer(http.HandlerFunc(handlePluginAPI))
+	defer srv.Close()
+
+	_, c := dialTerminal(t, srv, "/api/plugins/shell/term", "")
+	c.send(0x2, "hi\r")
+	c.waitFor("got:hi")
+	pid := pidOf(t, data)
+
+	release, err := git.LockInstall(plugins.Dir(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(plugins.Dir(), "shell")
+	if err := os.Rename(dir, dir+".old"); err != nil {
+		t.Fatal(err)
+	}
+	listed := make(chan []terminalInfo)
+	go func() { listed <- listTerminals("shell", "term", "", "") }()
+	time.Sleep(300 * time.Millisecond)
+	if err := os.Rename(dir+".old", dir); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if got := <-listed; len(got) != 1 {
+		t.Errorf("listed %+v during an update, want the one terminal", got)
+	}
+	if syscall.Kill(pid, 0) != nil {
+		t.Fatal("an update ended a terminal whose endpoint it kept")
+	}
 }
 
 func TestPluginTerminal_Refusals(t *testing.T) {
