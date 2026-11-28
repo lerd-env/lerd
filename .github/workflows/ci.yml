@@ -4,7 +4,6 @@ on:
   push:
     branches: ["main", "release/**"]
   pull_request:
-    branches: ["main", "release/**"]
   # The merge queue tests each PR on top of the latest main before merging it.
   merge_group:
   # Daily on main so govulncheck sees advisories published between pushes.
