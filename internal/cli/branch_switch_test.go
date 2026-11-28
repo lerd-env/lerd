@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -419,5 +420,27 @@ func TestSwitchBranch_stashCarriesTheWorkAcross(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dir, "notes")); got != "ours\n2\n3\n4\ntheirs\n" {
 		t.Errorf("local work not carried across: %q", got)
+	}
+}
+
+// The PHP move runs on the new branch's code and stops the switch before
+// composer when no installed version fits, instead of a wall of composer errors.
+func TestSwitchBranch_alignsPHPOnTheNewCodeBeforeComposer(t *testing.T) {
+	dir := switchFixture(t, func(dir string) { putFile(t, filepath.Join(dir, "composer.json"), `{"require":{"php":"^8.5"}}`) })
+	prev := alignCheckoutPHP
+	t.Cleanup(func() { alignCheckoutPHP = prev })
+	var saw string
+	alignCheckoutPHP = func(d string) (string, error) {
+		b, _ := os.ReadFile(filepath.Join(d, "composer.json"))
+		saw = string(b)
+		return "", errors.New("no PHP fits")
+	}
+
+	_, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Composer: true}, nil, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "no PHP fits") {
+		t.Fatalf("err = %v, want the PHP refusal", err)
+	}
+	if !strings.Contains(saw, "^8.5") {
+		t.Errorf("aligned against %q, want the new branch's composer.json", saw)
 	}
 }

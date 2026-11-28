@@ -104,3 +104,14 @@ todo "7.26 worktree.migrations picks share / clone / empty with its reason" "nee
 for b in "$x" "vmm$tag" "vmw$tag"; do lerd worktree remove --force "$(wt "$b")" </dev/null >/dev/null 2>&1; done
 git branch -q -D "$x" "$y" "$i" "vmm$tag" "vmw$tag" 2>/dev/null
 expect_200 7.27 "$parent_url"
+# A branch requiring a newer installed PHP than the site runs: the switch moves
+# the site onto it before composer install. Phase 4 leaves 8.3 and 8.5 built.
+api() { curl -s -X "$1" -H 'X-Lerd-CSRF: 1' "http://127.0.0.1:7073$2"; }
+home=$(git symbolic-ref --short HEAD) was=$(cat .php-version 2>/dev/null)
+lerd isolate 8.3 </dev/null >/dev/null 2>&1
+git switch -q -c "vmphp$tag" && python3 -c 'import json; f="composer.json"; d=json.load(open(f)); d.setdefault("require", {})["php"]=">=8.5"; json.dump(d, open(f, "w"), indent=4)' && git -c user.email=t@t -c user.name=t commit -qm "require php 8.5" composer.json && git switch -q "$home"
+check_out "7.28 a branch switch moves the site onto the PHP the branch requires before composer" 'PHP switched to 8\.5' api POST "/api/sites/branch-switch?domain=$(site_host "$DEMO_DIR")&branch=vmphp$tag&composer=1"
+check_out "the site now runs 8.5" 'PHP +8\.5' lerd which
+expect_200 "7.28 [partial]" "$parent_url"
+git switch -q "$home" && git checkout -q -- .php-version .lerd.yaml && git branch -q -D "vmphp$tag"
+lerd isolate "${was:-8.3}" </dev/null >/dev/null 2>&1

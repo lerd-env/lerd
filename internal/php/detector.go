@@ -375,6 +375,10 @@ func satisfiesSingle(major, minor int, constraint string) bool {
 		cMajor, cMinor := parseMajorMinor(stripOp(constraint, "<"))
 		return major < cMajor || (major == cMajor && minor < cMinor)
 	case strings.HasPrefix(constraint, "!="):
+		// One excluded patch leaves the minor's other patches, so it rules nothing out.
+		if strings.Count(stripOp(constraint, "!="), ".") >= 2 {
+			return true
+		}
 		cMajor, cMinor := parseMajorMinor(stripOp(constraint, "!="))
 		return major != cMajor || minor != cMinor
 	default:
