@@ -446,23 +446,33 @@ var rerunSiteEnv = func(dir string) {
 	})
 }
 
-// unsupportedSitesMessage lists the sites whose PHP has no native runtime, or
+// unsupportedSitesMessage lists the sites and worktrees whose PHP has no native runtime, or
 // "" when every site could move. The switch is install-wide, so naming them all
 // at once turns a run of failed attempts into one decision.
 func unsupportedSitesMessage(sites []config.Site) string {
 	var blocked []string
 	seen := map[string]bool{}
+	add := func(entry string) {
+		if !seen[entry] {
+			seen[entry] = true
+			blocked = append(blocked, entry)
+		}
+	}
 	for i := range sites {
 		s := &sites[i]
-		if !switchableToNative(s) || nativephp.Supported(s.PHPVersion) {
+		if !switchableToNative(s) {
 			continue
 		}
-		entry := s.Name + " (php " + s.PHPVersion + ")"
-		if seen[entry] {
-			continue
+		if !nativephp.Supported(s.PHPVersion) {
+			add(s.Name + " (php " + s.PHPVersion + ")")
 		}
-		seen[entry] = true
-		blocked = append(blocked, entry)
+		// A worktree pinning an older PHP would get a vhost with no listener behind it.
+		wts, _ := switchWorktreesFor(s.Path, s.PrimaryDomain())
+		for _, wt := range wts {
+			if v := config.WorktreePHPVersion(wt.Path, s.PHPVersion); v != s.PHPVersion && !nativephp.Supported(v) {
+				add(wt.Domain + " (php " + v + ")")
+			}
+		}
 	}
 	if len(blocked) == 0 {
 		return ""
