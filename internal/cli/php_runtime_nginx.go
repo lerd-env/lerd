@@ -29,10 +29,9 @@ var (
 	}
 )
 
-// moveWebServer takes nginx along when a PHP runtime switch changes where it
-// runs, reporting whether it did so the caller restarts nginx rather than
-// reloads it. The moving sites' vhosts were rewritten already; the rest goes
-// first, so the nginx that starts reads nothing written for its old home.
+// moveWebServer takes nginx along when a runtime switch changes where it runs,
+// reporting it so the caller restarts rather than reloads. Everything else is
+// rewritten first, so the nginx that starts reads nothing meant for its old home.
 func moveWebServer(wasOnHost bool, sites []config.Site) bool {
 	if moveOnHostFn() == wasOnHost {
 		return false
