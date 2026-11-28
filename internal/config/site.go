@@ -144,6 +144,9 @@ type Site struct {
 	// the worker unit is handed it, so both sides agree without the project
 	// having to name a port anywhere.
 	WorkerPorts map[string]int `yaml:"worker_ports,omitempty"`
+	// FrankenPHPHostPort is the loopback port a FrankenPHP site's container is
+	// published on, so an nginx on the host can reach it without its name.
+	FrankenPHPHostPort int `yaml:"frankenphp_host_port,omitempty"`
 	// WorktreeDevPorts pins each worktree's dev server to its own host
 	// port, keyed by the worktree's directory base like the idle map. A
 	// worktree runs its own dev server, so it cannot share the parent's pin.
@@ -291,6 +294,7 @@ type siteYAML struct {
 	WorktreePublicPorts   map[string]int      `yaml:"worktree_public_ports,omitempty"`
 	DevServerPort         int                 `yaml:"dev_server_port,omitempty"`
 	WorkerPorts           map[string]int      `yaml:"worker_ports,omitempty"`
+	FrankenPHPHostPort    int                 `yaml:"frankenphp_host_port,omitempty"`
 	WorktreeDevPorts      map[string]int      `yaml:"worktree_dev_server_ports,omitempty"`
 	WorktreeHostPorts     map[string]int      `yaml:"worktree_host_proxy_ports,omitempty"`
 	ContainerPort         int                 `yaml:"container_port,omitempty"`
@@ -339,6 +343,7 @@ func (s Site) toYAML() siteYAML {
 		WorktreePublicPorts:   s.WorktreePublicPorts,
 		DevServerPort:         s.DevServerPort,
 		WorkerPorts:           s.WorkerPorts,
+		FrankenPHPHostPort:    s.FrankenPHPHostPort,
 		WorktreeDevPorts:      s.WorktreeDevPorts,
 		WorktreeHostPorts:     s.WorktreeHostPorts,
 		ContainerPort:         s.ContainerPort,
@@ -392,6 +397,7 @@ func (sy siteYAML) toSite() Site {
 		WorktreePublicPorts:   sy.WorktreePublicPorts,
 		DevServerPort:         sy.DevServerPort,
 		WorkerPorts:           sy.WorkerPorts,
+		FrankenPHPHostPort:    sy.FrankenPHPHostPort,
 		WorktreeDevPorts:      sy.WorktreeDevPorts,
 		WorktreeHostPorts:     sy.WorktreeHostPorts,
 		ContainerPort:         sy.ContainerPort,
@@ -668,6 +674,10 @@ func AddSite(site Site) error {
 
 	for i, s := range reg.Sites {
 		if s.Name == site.Name {
+			// Claimed after the caller loaded the site, so its copy may predate it.
+			if site.FrankenPHPHostPort == 0 {
+				site.FrankenPHPHostPort = s.FrankenPHPHostPort
+			}
 			reg.Sites[i] = site
 			return SaveSites(reg)
 		}
@@ -1102,6 +1112,42 @@ func ClaimWorktreeHostPort(name, wtBase string, pick func() int) (int, error) {
 		return port, SaveSites(reg)
 	}
 	return 0, fmt.Errorf("site %q not found", name)
+}
+
+// ClaimFrankenPHPHostPort returns the loopback port recorded for a FrankenPHP
+// site, or records the one pick returns, under the registry lock so two sites
+// never get the same port. pick is handed the ports other sites already hold.
+func ClaimFrankenPHPHostPort(name string, pick func(taken map[int]bool) int) (int, error) {
+	unlock, err := lockSites()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return 0, err
+	}
+	taken := map[int]bool{}
+	idx := -1
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			idx = i
+		} else if p := reg.Sites[i].FrankenPHPHostPort; p > 0 {
+			taken[p] = true
+		}
+	}
+	if idx < 0 {
+		return 0, fmt.Errorf("site %q not found", name)
+	}
+	if p := reg.Sites[idx].FrankenPHPHostPort; p > 0 {
+		return p, nil
+	}
+	port := pick(taken)
+	if port <= 0 {
+		return 0, fmt.Errorf("no free loopback port for %s", name)
+	}
+	reg.Sites[idx].FrankenPHPHostPort = port
+	return port, SaveSites(reg)
 }
 
 // SetSiteHostPort records the port a host-proxy site's dev server runs on, and

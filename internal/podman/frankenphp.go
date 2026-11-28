@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 )
 
@@ -36,6 +37,27 @@ func FrankenPHPBaseImage(phpVersion string) string {
 // fixed so the nginx proxy target and framework entrypoints stay in sync.
 const FrankenPHPPort = 8000
 
+// frankenPHPHostPortBase is where the loopback ports for FrankenPHP containers start.
+const frankenPHPHostPortBase = 18000
+
+// Seams so a test claims no port in the developer's own registry.
+var (
+	claimFrankenPHPHostPortFn = config.ClaimFrankenPHPHostPort
+	frankenPHPPortBindable    = freeport.Bindable
+)
+
+// FrankenPHPHostPort returns the loopback port a FrankenPHP site's container is
+// published on, claiming one on first use. An nginx on the host proxies to it,
+// since it cannot resolve the container by name.
+func FrankenPHPHostPort(siteName string) (int, error) {
+	return claimFrankenPHPHostPortFn(siteName, func(taken map[int]bool) int {
+		reserved := config.ReservedHostPorts()
+		return freeport.FirstFree(frankenPHPHostPortBase, func(p int) bool {
+			return taken[p] || reserved[p] || !frankenPHPPortBindable(p)
+		})
+	})
+}
+
 // GenerateFrankenPHPQuadlet builds a quadlet .container file for a per-site
 // FrankenPHP container. The container mounts the project at its host path,
 // joins the lerd network, and runs the framework's declared entrypoint. Any
@@ -45,6 +67,11 @@ const FrankenPHPPort = 8000
 // without its Volume= line, which would leave the container serving nothing
 // (#884).
 func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string) (string, error) {
+	return generateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env, 0)
+}
+
+// generateFrankenPHPQuadlet publishes the container on hostPort at loopback when it is set.
+func generateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string, hostPort int) (string, error) {
 	if !bindMountable(projectPath) {
 		return "", fmt.Errorf("invalid project path %q for site %s: cannot be bind-mounted into a container", projectPath, siteName)
 	}
@@ -60,6 +87,9 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	fmt.Fprintf(&b, "Image=%s\n", image)
 	fmt.Fprintf(&b, "ContainerName=%s\n", containerName)
 	b.WriteString("Network=lerd\n")
+	if hostPort > 0 {
+		fmt.Fprintf(&b, "PublishPort=127.0.0.1:%d:%d\n", hostPort, FrankenPHPPort)
+	}
 	fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	fmt.Fprintf(&b, "Volume=%s:%s:rw\n", projectPath, projectPath)
 	b.WriteString(frankenPHPWorktreeMounts(projectPath))
@@ -178,7 +208,9 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 	if home := composer.HomeDir(); bindMountable(home) {
 		_ = os.MkdirAll(home, 0o755)
 	}
-	content, err := GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env)
+	// A site not yet in the registry has no port to claim; it is published once it is.
+	hostPort, _ := FrankenPHPHostPort(siteName)
+	content, err := generateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env, hostPort)
 	if err != nil {
 		return false, err
 	}

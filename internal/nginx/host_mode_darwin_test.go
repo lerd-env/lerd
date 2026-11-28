@@ -74,9 +74,9 @@ func TestHostMode_NamesTheLegThatFails(t *testing.T) {
 		}, "space"},
 		{"a site needs container nginx", func(t *testing.T) {
 			reg, _ := config.LoadSites()
-			reg.Sites = append(reg.Sites, config.Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"})
+			reg.Sites = append(reg.Sites, config.Site{Name: "custom", Domains: []string{"custom.test"}, Path: "/srv/custom", ContainerPort: 3000})
 			_ = config.SaveSites(reg)
-		}, "franken"},
+		}, "custom"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -208,6 +208,13 @@ func TestRewriteNginxQuadlet_onHostWritesTheHostUnitAndDropsTheContainer(t *test
 	t.Cleanup(func() { writeServiceUnitFn, removeContainerFn = prevWrite, prevRemove })
 	writeServiceUnitFn = func(name, content string) (bool, error) { wrote = name + "\n" + content; return true, nil }
 	removeContainerFn = func(name string) { removed = name }
+	quadlet := filepath.Join(config.QuadletDir(), "lerd-nginx.container")
+	if err := os.MkdirAll(filepath.Dir(quadlet), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(quadlet, []byte("[Container]\nContainerName=lerd-nginx\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	changed, err := RewriteNginxQuadlet()
 	if err != nil || !changed {
@@ -218,6 +225,10 @@ func TestRewriteNginxQuadlet_onHostWritesTheHostUnitAndDropsTheContainer(t *test
 	}
 	if removed != "lerd-nginx" {
 		t.Errorf("container removed = %q, want lerd-nginx", removed)
+	}
+	// Left behind, the LAN rebind rewrites it and its launchd job over the host's.
+	if _, err := os.Stat(quadlet); !os.IsNotExist(err) {
+		t.Errorf("the container's quadlet is still installed: %v", err)
 	}
 }
 
@@ -284,11 +295,11 @@ func TestEnsureNginxConfig_onHostDefersToAnOverrideOfAbsoluteRedirect(t *testing
 // registry must not turn every later write into the other home's form.
 func TestOnHost_staysUntilPlaceMovesIt(t *testing.T) {
 	hostModeLegs(t)
-	franken := config.Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"}
-	if err := RefuseContainerSite(franken); err == nil || !strings.Contains(err.Error(), "lerd php:runtime container") {
+	custom := config.Site{Name: "custom", Domains: []string{"custom.test"}, Path: "/srv/custom", ContainerPort: 3000}
+	if err := RefuseContainerSite(custom); err == nil || !strings.Contains(err.Error(), "lerd php:runtime container") {
 		t.Errorf("RefuseContainerSite on the host = %v, want a refusal naming the way out", err)
 	}
-	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{franken}}); err != nil {
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{custom}}); err != nil {
 		t.Fatal(err)
 	}
 	if !OnHost() {
@@ -297,7 +308,90 @@ func TestOnHost_staysUntilPlaceMovesIt(t *testing.T) {
 	if moved, err := Place(); err != nil || !moved || OnHost() {
 		t.Errorf("Place() = %v, %v, OnHost() = %v; want it moved into its container", moved, err, OnHost())
 	}
-	if err := RefuseContainerSite(franken); err != nil {
+	if err := RefuseContainerSite(custom); err != nil {
 		t.Errorf("RefuseContainerSite in the container = %v", err)
+	}
+}
+
+// A FrankenPHP site no longer keeps nginx in its container: the host's nginx
+// proxies to the loopback port its container is published on.
+func TestHostMode_FrankenPHPProxiesToItsLoopbackPort(t *testing.T) {
+	franken := config.Site{Name: "franken", Domains: []string{"franken.test"}, Path: "/srv/franken", Runtime: "frankenphp"}
+	hostModeLegs(t, franken)
+	if why := HostModeBlocker(); why != "" {
+		t.Fatalf("a FrankenPHP site blocked host mode: %s", why)
+	}
+	if err := RefuseContainerSite(franken); err != nil {
+		t.Errorf("RefuseContainerSite(frankenphp) on the host = %v", err)
+	}
+	prev := frankenPHPHostPortFn
+	t.Cleanup(func() { frankenPHPHostPortFn = prev })
+	frankenPHPHostPortFn = func(string) (int, error) { return 18003, nil }
+	for _, ssl := range []bool{false, true} {
+		got, err := renderContainerVhost(franken, "lerd-fp-franken", 8000, false, ssl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(got), `set $backend "127.0.0.1";`) || !strings.Contains(string(got), "$backend:18003;") || strings.Contains(string(got), "lerd-fp-franken") {
+			t.Errorf("ssl=%v: vhost does not proxy to the loopback port:\n%s", ssl, got)
+		}
+	}
+}
+
+// In its container nginx still reaches FrankenPHP by name, and claims no port.
+func TestContainerNginx_FrankenPHPKeepsTheContainerName(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	prev := frankenPHPHostPortFn
+	t.Cleanup(func() { frankenPHPHostPortFn = prev })
+	frankenPHPHostPortFn = func(string) (int, error) { t.Fatal("claimed a port with nginx in its container"); return 0, nil }
+	got, err := renderContainerVhost(config.Site{Name: "franken", Domains: []string{"franken.test"}, Runtime: "frankenphp"}, "lerd-fp-franken", 8000, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `set $backend "lerd-fp-franken";`) {
+		t.Errorf("container vhost lost the container name:\n%s", got)
+	}
+}
+
+// A hand-edited _default.conf is kept, but in the host's form, or one file in
+// the container's paths stops the host's nginx starting and every site with it.
+func TestEnsureDefaultVhost_onHostTranslatesAHandEdit(t *testing.T) {
+	hostModeLegs(t)
+	path := filepath.Join(config.NginxConfD(), "_default.conf")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	edit := "server {\n    listen 443 default_server ssl;\n    ssl_certificate /etc/nginx/certs/app.test.crt;\n}\n"
+	if err := os.WriteFile(path, []byte(edit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDefaultVhost(); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if strings.Contains(string(got), "/etc/nginx") || !strings.Contains(string(got), filepath.Join(config.CertsDir(), "sites", "app.test.crt")) {
+		t.Errorf("hand edit not in the host's form:\n%s", got)
+	}
+	if _, err := os.Stat(path + defaultVhostManagedHashSuffix); err == nil {
+		t.Error("the translated edit was claimed as lerd's own")
+	}
+	if err := EnsureDefaultVhost(); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := os.ReadFile(path); string(again) != string(got) {
+		t.Errorf("a second pass changed the edit again:\n%s", again)
+	}
+}
+
+// The dashboard's claim redirects to 127.0.0.1:7073. On the host that is also
+// the vhost's proxy_pass, so nginx must not rewrite it back onto lerd.localhost.
+func TestLerdVhost_keepsTheClaimRedirect(t *testing.T) {
+	hostModeLegs(t)
+	got, err := renderLerdVhost()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hostForm([]byte(got))), "proxy_redirect off;") {
+		t.Errorf("lerd vhost rewrites the claim redirect:\n%s", got)
 	}
 }

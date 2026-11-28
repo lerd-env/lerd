@@ -176,3 +176,23 @@ func TestShellJoinEscapesBackslash(t *testing.T) {
 		t.Fatalf("shellJoin backslash:\n  want %s\n  got  %s", want, got)
 	}
 }
+
+// The container is published on loopback only when a port was claimed for it.
+func TestGenerateFrankenPHPQuadlet_publishesTheHostPort(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	with, err := generateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil, 18002)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, "PublishPort=127.0.0.1:18002:8000\n") {
+		t.Errorf("quadlet does not publish the loopback port:\n%s", with)
+	}
+	without, err := GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(without, "PublishPort=") {
+		t.Errorf("quadlet published a port nobody claimed:\n%s", without)
+	}
+}

@@ -47,8 +47,10 @@ func HostModeBlocker() string {
 	return ""
 }
 
+// needsContainerNginx: a FrankenPHP container is published on a loopback port the
+// host's nginx proxies to, which custom containers and custom FPM are not yet.
 func needsContainerNginx(s config.Site) bool {
-	return s.IsFrankenPHP() || s.IsCustomContainer() || s.IsCustomFPM()
+	return s.IsCustomContainer() || s.IsCustomFPM()
 }
 
 // OnHost reports where nginx runs now, as Place last recorded it, not where it

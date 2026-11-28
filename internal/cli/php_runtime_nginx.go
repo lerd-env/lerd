@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -81,11 +83,49 @@ func rewriteUnmovedConfigs(sites []config.Site) {
 				feedback.Warn("rewriting the paused page for %s: %v", s.Name, err)
 			}
 		default:
+			if s.IsFrankenPHP() && moveOnHostFn() {
+				publishFrankenPHP(*s)
+			}
 			if err := webserver.ApplySite(*s); err != nil {
 				feedback.Warn("rewriting the vhost for %s: %v", s.Name, err)
 			}
 		}
 		rewriteUnmovedWorktrees(*s)
+	}
+}
+
+// refreshFrankenPHPFn rewrites a FrankenPHP quadlet, a seam so tests restart nothing.
+// It restarts on what the running container publishes, not on whether this write
+// changed the file: an earlier writer may have changed it without a restart.
+var refreshFrankenPHPFn = func(s config.Site) error {
+	changed, err := podman.RefreshFrankenPHPQuadlet(s)
+	if err != nil {
+		return err
+	}
+	port, err := podman.FrankenPHPHostPort(s.Name)
+	if err != nil {
+		return err
+	}
+	unit := podman.FrankenPHPContainerName(s.Name)
+	if !changed && frankenPHPPublishes(unit, port) {
+		return nil
+	}
+	_ = podman.DaemonReloadFn()
+	return podman.RestartUnit(unit)
+}
+
+// frankenPHPPublishes reports whether the running container serves its port on
+// the loopback one the host's nginx proxies to.
+func frankenPHPPublishes(unit string, hostPort int) bool {
+	out, err := podman.Run("port", unit, strconv.Itoa(podman.FrankenPHPPort))
+	return err == nil && strings.Contains(out, fmt.Sprintf("127.0.0.1:%d", hostPort))
+}
+
+// publishFrankenPHP restarts a FrankenPHP container on the loopback port the
+// host's nginx proxies to, when its quadlet did not publish one yet.
+func publishFrankenPHP(s config.Site) {
+	if err := refreshFrankenPHPFn(s); err != nil {
+		feedback.Warn("publishing %s for the host's nginx: %v", s.Name, err)
 	}
 }
 
